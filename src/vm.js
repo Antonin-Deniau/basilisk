@@ -2,22 +2,29 @@ const fs = require("fs");
 const path = require("path");
 
 const ast = require("./ast.js");
-const { setDataPath, resolveRecursive } = require("./utils/vmUtils.js");
+const { setDataPath, resolveRecursive, concatPath } = require("./utils/vmUtils.js");
 
 
 const resolveVar = (context, variable) => {
 	if (Array.isArray(variable)) {
-		const nextContext = processList(context, variable);
-		return nextContext.__return__;
+		return processList(context, variable);
 	}
 
+	let res;
 	switch (variable.token) {
-		case "STRING": return JSON.parse(variable.text);
-		case "NUMBER": return parseInt(variable.text);
+		case "STRING": 
+			res = JSON.parse(variable.text);
+			context.__return__ = res;
+			return context;
+		case "NUMBER":
+			res = parseInt(variable.text);
+			context.__return__ = res;
+			return context;
 		case "NAME":
-			const data = resolveRecursive(context.namespace, context.current, variable.text, false);
+			const data = resolveRecursive(context, context.__current__, variable.text, false);
 			if (data) {
-				return data;
+				context.__return__ = data;
+				return context;
 			} else {
 				throw "Variable not found " + variable.text;
 			}
@@ -27,14 +34,11 @@ const resolveVar = (context, variable) => {
 }
 
 const executeInstructions = (context, list) => {
-	let savedContext;
 	for (const data of list) {
 		if (Array.isArray(data)) {
-			savedContext = context.current;
 			context = processList(context, data);
-			context.current = savedContext;
 		} else {
-			context.__return__ = resolveVar(context, data);
+			context = resolveVar(context, data);
 		}
 	}
 
@@ -42,8 +46,8 @@ const executeInstructions = (context, list) => {
 };
 
 const callSys = (context, list) => {
-	const path = list.slice(1, list.length - 1).map(e => resolveVar(context, e));
-	const args = list[list.length - 1].map(e => resolveVar(context, e));
+	const path = list.slice(1, list.length - 1).map(e => resolveVar(context, e).__return__);
+	const args = list[list.length - 1].map(e => resolveVar(context, e).__return__);
 
 	context.__return__ = path.reduce((acc, arr) => acc[arr], global)(...args);
 
@@ -55,7 +59,24 @@ const defineFunction = (context, list) => {
 	const __args__ = list.length > 2 ? list[2] : [];
 	const __instructions__ = list.slice(3, list.length);
 
-	setDataPath(context.namespace, context.current, name, { __instructions__, __args__, __return__: null });
+	setDataPath(context, context.__current__, name, { __instructions__, __args__, __return__: null });
+	return context;
+};
+
+const callTernary = (context, list) => {
+	const condition = list[1];
+	const valid = list[2];
+	const invalid = list[3];
+
+
+	context = resolveVar(context, condition);
+
+	if (context.__return__) {
+		context = resolveVar(context, valid);
+	} else {
+		context = resolveVar(context, invalid);
+	}
+
 	return context;
 };
 
@@ -63,22 +84,22 @@ const defineVariable = (context, list) => {
 	const name = list[1].text;
 	const data = list[2];
 
-	const res = resolveVar(context, data);
+	context = resolveVar(context, data);
 
-	setDataPath(context.namespace, context.current, name, res);
+	setDataPath(context, context.__current__, name, context.__return__);
 	return context;
 };
 
 const defineImport = (context, list) => {
 	const arg = JSON.parse(list[1].text).split(".");
-	if (context.namespace.PATH) {
-		var PATH = context.namespace.PATH;
+	if (context.__path__) {
+		var PATH = context.__path__;
 	} else {
 		throw "No path available";
 	}
 
 	for (let currPath of PATH) {
-		const filePath = path.resolve(currPath, context.current, ...arg) + ".cr";
+		const filePath = path.resolve(currPath, context.__current__, ...arg) + ".cr";
 
 		try {
 			const data = fs.readFileSync(filePath, 'utf8');
@@ -96,7 +117,7 @@ const defineImport = (context, list) => {
 
 const arithmetic = (context, list) => {
 	const op = list[0].text;
-	const data = list.slice(1, list.length).map(e => resolveVar(context, e))
+	const data = list.slice(1, list.length).map(e => resolveVar(context, e).__return__)
 
 	const args = data.slice(1, data.length);
 	const initial = data[0];
@@ -109,9 +130,9 @@ const arithmetic = (context, list) => {
 		case "-": res = args.reduce((acc, arr) => acc - arr, initial); break;
 		case "&": res = args.reduce((acc, arr) => acc & arr, initial); break;
 		case "|": res = args.reduce((acc, arr) => acc & arr, initial); break;
-		case "==": res = args[0] == args[1]; break;
-		case "!=": res = args[0] != args[1]; break;
-		case "!": res = !args[0]; break;
+		case "==": res = data[0] == data[1]; break;
+		case "!=": res = data[0] != data[1]; break;
+		case "!": res = !data[0]; break;
 		default:
 			throw "Undefined arithmetic" + op;
 	}
@@ -124,19 +145,26 @@ const callFunction = (context, list) => {
 	const name = list[0].text;
 	context.__return__ = null;
 
-	const ns = resolveRecursive(context.namespace, context.current, name, false);
+
+	const ns = resolveRecursive(context, context.__current__, name, false);
 
 	if (ns === false) {
 		throw "Undefined function " + name;
 	} else {
 		const argsValue = (list.length > 1 ? list.slice(1, list.length) : [])
-			.map(e => resolveVar(context, e));
+			.map(e => resolveVar(context, e).__return__);
+
+		let savedContext = context.__current__;
+		context.__current__ = concatPath(context.__current__, name);
 
 		ns.__args__.forEach((name, index) => {
-			setDataPath(context.namespace, context.current, name.text, argsValue[index]);
+			setDataPath(context, context.__current__, name.text, argsValue[index]);
 		});
 
-		return executeInstructions(context, ns.__instructions__);
+		let nextContext = executeInstructions(context, ns.__instructions__);
+		nextContext.__current__ = savedContext;
+
+		return nextContext;
 	}
 };
 
@@ -148,6 +176,7 @@ const callOperator = (context, list) => {
 		case "func": return defineFunction(context, list);
 		case "let": return defineVariable(context, list);
 		case "sys": return callSys(context, list);
+		case "?": return callTernary(context, list);
 	}
 
 	if (symbol[0] === "#") return context;
@@ -172,7 +201,7 @@ const processList = (context, list) => {
 };
 
 module.exports = (path) => {
-	const initialContext = { namespace: { PATH: path }, current: "", data: {} };
+	const initialContext = { __path__: path , __current__: "" };
 
 	return tokens => executeInstructions(initialContext, tokens);
 };

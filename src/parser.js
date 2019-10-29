@@ -4,7 +4,7 @@ const { loop, seq, choose, match } = require("./utils/parserUtils.js");
 const string = match("STRING", /"([^"\\]|\\.)*"/);
 const number = match("NUMBER", /[1-9](\d+)?(\.\d+)?/);
 const name = match("NAME", /([_A-z]([_A-z1-9]+)?)(\.[_A-z]([_A-z1-9]+)?){0,}/);
-const operator = match("OPERATOR", /(if|func|import|let|sys|#([^>\\]|\\.)*)/);
+const operator = match("OPERATOR", /(\?|func|import|let|sys|#([^>\\]|\\.)*)/);
 const arithmetic = match("ARITHMETIC", /(\+|\-|\*|\||\/|\!|\&|==|\!=)/);
 
 const atom = choose([number, string, operator, arithmetic, name]);

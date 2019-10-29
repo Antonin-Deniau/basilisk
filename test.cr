@@ -6,4 +6,8 @@
 	<+ "Hello " name " !">
 >
 
-<io.echo <greeting "Antonin">>
+<? <== 1 2>
+	<io.echo <greeting "Antonin">>
+
+	<io.echo greeting>
+>

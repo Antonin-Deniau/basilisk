@@ -1,6 +1,7 @@
 
 const resolveRecursive = (object, initPath, initName, defaultValue) => {
 	initName = initName.split(".");
+	initPath = initPath.split(".");
 	let path = [...initPath, ...initName.slice(0, initName.length - 1)].filter(e => "" !== e);
 	let name = initName[initName.length - 1];
 
@@ -12,7 +13,7 @@ const resolveRecursive = (object, initPath, initName, defaultValue) => {
 		path.shift();
 	} while (path.length !== 0);
 
-	throw "Cannot find variable " + name;
+	throw "Cannot find variable " + initPath + "." + name;
 };
 
 const concatPath = (a, ...b) => a === "" ? b.join(".") : [a, ...b].join(".");
@@ -27,4 +28,4 @@ const setPath = (object, path, value) => path
 
 const setDataPath = (object, path, name, value) => setPath(object, concatPath(path, name), value);
 
-module.exports = { setDataPath, resolveRecursive };
+module.exports = { setDataPath, resolveRecursive, concatPath };

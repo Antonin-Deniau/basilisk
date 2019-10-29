@@ -1,7 +1,13 @@
+const fs = require("fs");
+const path = require("path");
+
+const ast = require("./ast.js");
 
 // Context utils
-const resolveRecursive = (object, initPath, name, defaultValue) => {
-	let path = initPath.split(".").filter(e => "" !== e);
+const resolveRecursive = (object, initPath, initName, defaultValue) => {
+	initName = initName.split(".");
+	let path = [...initPath, ...initName.slice(0, initName.length - 1)].filter(e => "" !== e);
+	let name = initName[initName.length - 1];
 
 	let res;
 	do {
@@ -92,6 +98,31 @@ const defineVariable = (context, list) => {
 	return context;
 };
 
+const defineImport = (context, list) => {
+	const arg = JSON.parse(list[1].text).split(".");
+	if (context.namespace.PATH) {
+		var PATH = context.namespace.PATH;
+	} else {
+		throw "No path available";
+	}
+
+	for (let currPath of PATH) {
+		const filePath = path.resolve(currPath, context.current, ...arg) + ".cr";
+
+		try {
+			const data = fs.readFileSync(filePath, 'utf8');
+
+			context = executeInstructions(context, ast(data));
+
+			return context;
+		} catch (e) {
+			continue;
+		}
+	}
+
+	throw "Unknow file " + arg.join(".");
+};
+
 const arithmetic = (context, list) => {
 	const op = list[0].text;
 	const data = list.slice(1, list.length).map(e => resolveVar(context, e))
@@ -120,10 +151,8 @@ const callFunction = (context, list) => {
 	const ns = resolveRecursive(context.namespace, context.current, name, false);
 
 	if (ns === false) {
-		throw "Unable to get namespace " + context.current;
-	}
-
-	if (ns !== false) {
+		throw "Undefined function " + name;
+	} else {
 		const argsValue = (list.length > 1 ? list.slice(1, list.length) : []).map(e => resolveVar(context, e));
 
 		ns.__args__.forEach((name, index) => {
@@ -131,13 +160,12 @@ const callFunction = (context, list) => {
 		});
 
 		return executeInstructions(context, ns.__instructions__);
-	} else {
-		throw "Undefined function " + name;
 	}
 };
 
 const callOperator = (context, list) => {
 	switch (list[0].text) {
+		case "import": return defineImport(context, list);
 		case "func": return defineFunction(context, list);
 		case "let": return defineVariable(context, list);
 		case "sys": return callSys(context, list);

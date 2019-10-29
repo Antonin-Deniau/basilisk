@@ -1,12 +1,9 @@
-<import "./utils/json.cr">
-<import "./utils/io.cr">
+<import "utils.json">
+<import "utils.io">
 
 <# This is a comment>
-
 <func greeting <name>
 	<+ "Hello " name " !">
 >
 
-<echo <to_json PATH>>
-<echo <greeting "lol">>
-<echo <to_json greeting>>
+<io.echo <greeting "Antonin">>

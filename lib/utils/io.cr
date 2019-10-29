@@ -1,3 +1,3 @@
-<func echo <data>
+<func io.echo <data>
 	<sys "console" "log" <data>>
 >

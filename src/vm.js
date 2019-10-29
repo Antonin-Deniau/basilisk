@@ -2,37 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const ast = require("./ast.js");
+const { setDataPath, resolveRecursive } = require("./utils/vmUtils.js");
 
-// Context utils
-const resolveRecursive = (object, initPath, initName, defaultValue) => {
-	initName = initName.split(".");
-	let path = [...initPath, ...initName.slice(0, initName.length - 1)].filter(e => "" !== e);
-	let name = initName[initName.length - 1];
-
-	let res;
-	do {
-		let res = resolvePath(object, [...path, name].join("."), false);
-		if (res !== false) return res;
-
-		path.shift();
-	} while (path.length !== 0);
-
-	throw "Cannot find variable " + name;
-};
-
-const concatPath = (a, ...b) => a === "" ? b.join(".") : [a, ...b].join(".");
-
-const resolvePath = (object, path, defaultValue) => path
-   .split('.').filter(e => e !== "")
-   .reduce((o, p) => o && o[p] ? o[p] : defaultValue, object)
-
-const setPath = (object, path, value) => path
-   .split('.').filter(e => e !== "")
-   .reduce((o,p,i) => o[p] = path.split('.').length === ++i ? value : o[p] || {}, object)
-
-const setDataPath = (object, path, name, value) => setPath(object, concatPath(path, name), value);
-
-// VM
 
 const resolveVar = (context, variable) => {
 	if (Array.isArray(variable)) {
@@ -136,6 +107,11 @@ const arithmetic = (context, list) => {
 		case "/": res = args.reduce((acc, arr) => acc / arr, initial); break;
 		case "*": res = args.reduce((acc, arr) => acc * arr, initial); break;
 		case "-": res = args.reduce((acc, arr) => acc - arr, initial); break;
+		case "&": res = args.reduce((acc, arr) => acc & arr, initial); break;
+		case "|": res = args.reduce((acc, arr) => acc & arr, initial); break;
+		case "==": res = args[0] == args[1]; break;
+		case "!=": res = args[0] != args[1]; break;
+		case "!": res = !args[0]; break;
 		default:
 			throw "Undefined arithmetic" + op;
 	}
@@ -153,7 +129,8 @@ const callFunction = (context, list) => {
 	if (ns === false) {
 		throw "Undefined function " + name;
 	} else {
-		const argsValue = (list.length > 1 ? list.slice(1, list.length) : []).map(e => resolveVar(context, e));
+		const argsValue = (list.length > 1 ? list.slice(1, list.length) : [])
+			.map(e => resolveVar(context, e));
 
 		ns.__args__.forEach((name, index) => {
 			setDataPath(context.namespace, context.current, name.text, argsValue[index]);
@@ -164,16 +141,16 @@ const callFunction = (context, list) => {
 };
 
 const callOperator = (context, list) => {
-	switch (list[0].text) {
+	const symbol = list[0].text;
+
+	switch (symbol) {
 		case "import": return defineImport(context, list);
 		case "func": return defineFunction(context, list);
 		case "let": return defineVariable(context, list);
 		case "sys": return callSys(context, list);
-		case "*": case "+": case "-": case "/":
-			return arithmetic(context, list);
 	}
 
-	if (list[0].text[0] === "#") return context;
+	if (symbol[0] === "#") return context;
 
 	throw "Undefined operator " + list[0].text;
 };
@@ -188,6 +165,7 @@ const processList = (context, list) => {
 
 		case "NAME": return callFunction(context, list);
 		case "OPERATOR": return callOperator(context, list);
+		case "ARITHMETIC": return arithmetic(context, list);
 	}
 
 	throw "Undefined token" + op;

@@ -1,19 +1,19 @@
 <import "io">
+<import "arr">
 
-<# This is a function to greet someone>
+"C'est un commentaire en texte"
 <func greeting <name>
-	<+ "Hello " name " !">
+  <+ "Hello " name " !">
 >
 
 <func greet_everyones_except <names except> 
-	<pipe names
-		<filter <func <name> <!= name except>>>
-		<map greeting>
-		<join "\n">
-	>
+  <<pipe names
+    <arr.filter <func <name> <!= name except>>>
+    <arr.map greeting>
+    <arr.join "\n">
+  > names>
 >
 
 <let group <array "Jackie" "Daniel" "Jean" "Paul">>
 
-<io.echo <greeting "Jean">>
-<# <io.echo <greet_everyones_except group "Jean"\>>
+<io.echo <greet_everyones_except group "Jean">>

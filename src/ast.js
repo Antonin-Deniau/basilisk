@@ -20,6 +20,6 @@ const tokensToAST = array => {
 };
 
 module.exports = data => {
-	const capturedTokens = tokens({ text: data, captured: [], error: false }).captured;
-	return tokensToAST(capturedTokens);
+	const result = tokens({ text: data, captured: [], error: false });
+	return tokensToAST(result.captured);
 };

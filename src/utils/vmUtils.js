@@ -6,14 +6,13 @@ const resolveRecursive = (object, initPath, initName, defaultValue) => {
 	let name = initName[initName.length - 1];
 
 	let res;
-	do {
-		let res = resolvePath(object, [...path, name].join("."), false);
+	while (true) {
+		res = resolvePath(object, [...path, name].join("."), false);
 		if (res !== false) return res;
 
+		if (path.length === 0) throw "Cannot find variable " + initPath.filter(e => "" !== e).join(".") + "." + name;
 		path.shift();
-	} while (path.length !== 0);
-
-	throw "Cannot find variable " + initPath + "." + name;
+	};
 };
 
 const concatPath = (a, ...b) => a === "" ? b.join(".") : [a, ...b].join(".");

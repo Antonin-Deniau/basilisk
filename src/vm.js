@@ -54,7 +54,7 @@ const executeInstructions = (context, list) => {
 	return context;
 };
 
-const callSys = (context, list) => {
+const operatorSys = (context, list) => {
 	let path, args;
 
 	[context, path] = resolveArgs(context, list.slice(1, list.length - 1));
@@ -65,7 +65,7 @@ const callSys = (context, list) => {
 	return context;
 };
 
-const defineFunction = (context, list) => {
+const operatorFunc = (context, list) => {
 	if (list.length < 3) throw "Wrong number of arguments in func";
 
 	if (Array.isArray(list[1])) {
@@ -89,7 +89,7 @@ const defineFunction = (context, list) => {
 	return context;
 };
 
-const callTernary = (context, list) => {
+const operatorIf = (context, list) => {
 	const condition = list[1];
 	const valid = list[2];
 	const invalid = list[3];
@@ -105,7 +105,7 @@ const callTernary = (context, list) => {
 	return context;
 };
 
-const defineVariable = (context, list) => {
+const operatorLet = (context, list) => {
 	const name = list[1].text;
 	const data = list[2];
 
@@ -115,7 +115,7 @@ const defineVariable = (context, list) => {
 	return context;
 };
 
-const defineArray = (context, list) => {
+const operatorArray = (context, list) => {
 	let arr;
 	[context, arr] = resolveArgs(context, list.slice(1, list.length));
 	context.__return__ = arr;
@@ -123,20 +123,20 @@ const defineArray = (context, list) => {
 	return context;
 };
 
-const definePipe = (context, list) => {
+const operatorPipe = (context, list) => {
 	let functions;
 
 	[context, functions] = resolveArgs(context, list.slice(2, list.length));
 
-	context = resolveVar(list[1]);
-	for (let func in functions) {
+	context = resolveVar(context, list[1]);
+	for (let func of functions) {
 		context = executeFunction(context, func, context.__return__);
 	}
 
 	return context;
 };
 
-const defineImport = (context, list) => {
+const operatorImport = (context, list) => {
 	const arg = JSON.parse(list[1].text).split(".");
 	if (context.__path__) {
 		var PATH = context.__path__;
@@ -162,7 +162,7 @@ const defineImport = (context, list) => {
 	throw "Unknow file " + arg.join(".");
 };
 
-const arithmetic = (context, list) => {
+const callArithmetic = (context, list) => {
 	let dataValues;
 
 	const op = list[0].text;
@@ -225,21 +225,28 @@ const callOperator = (context, list) => {
 	const symbol = list[0].text;
 
 	switch (symbol) {
-		case "import": return defineImport(context, list);
-		case "func": return defineFunction(context, list);
-		case "let": return defineVariable(context, list);
-		case "array": return defineArray(context, list);
-		case "sys": return callSys(context, list);
-		case "?": return callTernary(context, list);
+		case "import": return operatorImport(context, list);
+		case "func": return operatorFunc(context, list);
+		case "let": return operatorLet(context, list);
+		case "array": return operatorArray(context, list);
+		case "sys": return operatorSys(context, list);
+		case "if": return operatorIf(context, list);
+		case "pipe": return operatorPipe(context, list);
+		//case "filter": return operatorFilter(context, list);
 	}
-
-	if (symbol[0] === "#") return context;
 
 	throw "Undefined operator " + list[0].text;
 };
 
 const processList = (context, list) => {
-	const op = list[0];
+	let op;
+	if (Array.isArray(list[0])) {
+		context = processList(context, list[0]);
+		op = context.__return__;
+	} else {
+		op = list[0];
+	}
+
 	const args = list.slice(1, list.length);
 
 	switch (op.token) {
@@ -248,7 +255,7 @@ const processList = (context, list) => {
 
 		case "NAME": return callFunction(context, list);
 		case "OPERATOR": return callOperator(context, list);
-		case "ARITHMETIC": return arithmetic(context, list);
+		case "ARITHMETIC": return callArithmetic(context, list);
 	}
 
 	throw "Undefined token" + op;

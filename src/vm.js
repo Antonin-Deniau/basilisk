@@ -71,17 +71,18 @@ const defineFunction = (context, list) => {
 	if (Array.isArray(list[1])) {
 		const __args__ = list[1];
 		const __instructions__ = list.slice(2, list.length);
+		const __name__ = '_' + Math.random().toString(36).substr(2, 9);
 
 		context.__return__ = { __instructions__, __args__ };
 	} else {
 		if (list.length < 4) throw "Wrong number of arguments in func " + list[1];
 
-		const name = list[1].text;
 		const __args__ = list[2];
 		const __instructions__ = list.slice(3, list.length);
+		const __name__ = list[1].text;
 
-		const func = { __instructions__, __args__ };
-		setDataPath(context, context.__current__, name, func);
+		const func = { __instructions__, __args__, __name__ };
+		setDataPath(context, context.__current__, __name__, func);
 		context.__return__ = func;
 	}
 
@@ -125,10 +126,12 @@ const defineArray = (context, list) => {
 const definePipe = (context, list) => {
 	let functions;
 
-	context = resolveVar(list[1]);
-	const data = context.__return__;
+	[context, functions] = resolveArgs(context, list.slice(2, list.length));
 
-	[context, functions] = resolveVar(context, list.slice(2, list.length));
+	context = resolveVar(list[1]);
+	for (let func in functions) {
+		context = executeFunction(context, func, context.__return__);
+	}
 
 	return context;
 };
@@ -151,7 +154,8 @@ const defineImport = (context, list) => {
 
 			return context;
 		} catch (e) {
-			continue;
+			if (e.code === "ENOENT") continue;
+			throw e;
 		}
 	}
 
@@ -187,11 +191,25 @@ const arithmetic = (context, list) => {
 	return context;
 };
 
+const executeFunction = (context, func, args) => {
+	let savedContext = context.__current__;
+	context.__current__ = concatPath(context.__current__, func.__name__);
+
+	func.__args__.forEach((name, index) => {
+		setDataPath(context, context.__current__, name.text, args[index]);
+	});
+
+	context = executeInstructions(context, func.__instructions__);
+	context.__current__ = savedContext;
+
+	return context;
+};
+
 const callFunction = (context, list) => {
 	let argsValue;
 
 	const name = list[0].text;
-	const args = (list.length > 1 ? list.slice(1, list.length) : []);
+	const args = list.slice(1, list.length);
 
 	context.__return__ = null;
 
@@ -200,17 +218,7 @@ const callFunction = (context, list) => {
 
 	[context, argsValue] = resolveArgs(context, args);
 
-	let savedContext = context.__current__;
-	context.__current__ = concatPath(context.__current__, name);
-
-	func.__args__.forEach((name, index) => {
-		setDataPath(context, context.__current__, name.text, argsValue[index]);
-	});
-
-	let nextContext = executeInstructions(context, func.__instructions__);
-	nextContext.__current__ = savedContext;
-
-	return nextContext;
+	return executeFunction(context, func, argsValue);
 };
 
 const callOperator = (context, list) => {

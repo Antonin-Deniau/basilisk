@@ -4,6 +4,15 @@ const path = require("path");
 const ast = require("./ast.js");
 const { setDataPath, resolveRecursive, concatPath } = require("./utils/vmUtils.js");
 
+const resolveArgs = (context, args) => {
+	let argsValue = [];
+	for (let arg of args) {
+		context = resolveVar(context, arg);
+		argsValue.push(context.__return__);
+	}
+
+	return [context, argsValue];
+};
 
 const resolveVar = (context, variable) => {
 	if (Array.isArray(variable)) {
@@ -46,8 +55,10 @@ const executeInstructions = (context, list) => {
 };
 
 const callSys = (context, list) => {
-	const path = list.slice(1, list.length - 1).map(e => resolveVar(context, e).__return__);
-	const args = list[list.length - 1].map(e => resolveVar(context, e).__return__);
+	let path, args;
+
+	[context, path] = resolveArgs(context, list.slice(1, list.length - 1));
+	[context, args] = resolveArgs(context, list[list.length - 1]);
 
 	context.__return__ = path.reduce((acc, arr) => acc[arr], global)(...args);
 
@@ -55,11 +66,25 @@ const callSys = (context, list) => {
 };
 
 const defineFunction = (context, list) => {
-	const name = list[1].text;
-	const __args__ = list.length > 2 ? list[2] : [];
-	const __instructions__ = list.slice(3, list.length);
+	if (list.length < 3) throw "Wrong number of arguments in func";
 
-	setDataPath(context, context.__current__, name, { __instructions__, __args__, __return__: null });
+	if (Array.isArray(list[1])) {
+		const __args__ = list[1];
+		const __instructions__ = list.slice(2, list.length);
+
+		context.__return__ = { __instructions__, __args__ };
+	} else {
+		if (list.length < 4) throw "Wrong number of arguments in func " + list[1];
+
+		const name = list[1].text;
+		const __args__ = list[2];
+		const __instructions__ = list.slice(3, list.length);
+
+		const func = { __instructions__, __args__ };
+		setDataPath(context, context.__current__, name, func);
+		context.__return__ = func;
+	}
+
 	return context;
 };
 
@@ -67,7 +92,6 @@ const callTernary = (context, list) => {
 	const condition = list[1];
 	const valid = list[2];
 	const invalid = list[3];
-
 
 	context = resolveVar(context, condition);
 
@@ -87,6 +111,25 @@ const defineVariable = (context, list) => {
 	context = resolveVar(context, data);
 
 	setDataPath(context, context.__current__, name, context.__return__);
+	return context;
+};
+
+const defineArray = (context, list) => {
+	let arr;
+	[context, arr] = resolveArgs(context, list.slice(1, list.length));
+	context.__return__ = arr;
+
+	return context;
+};
+
+const definePipe = (context, list) => {
+	let functions;
+
+	context = resolveVar(list[1]);
+	const data = context.__return__;
+
+	[context, functions] = resolveVar(context, list.slice(2, list.length));
+
 	return context;
 };
 
@@ -116,8 +159,11 @@ const defineImport = (context, list) => {
 };
 
 const arithmetic = (context, list) => {
+	let dataValues;
+
 	const op = list[0].text;
-	const data = list.slice(1, list.length).map(e => resolveVar(context, e).__return__)
+
+	[context, data] = resolveArgs(context, list.slice(1, list.length));
 
 	const args = data.slice(1, data.length);
 	const initial = data[0];
@@ -142,30 +188,29 @@ const arithmetic = (context, list) => {
 };
 
 const callFunction = (context, list) => {
+	let argsValue;
+
 	const name = list[0].text;
+	const args = (list.length > 1 ? list.slice(1, list.length) : []);
+
 	context.__return__ = null;
 
+	context = resolveVar(context, { token: "NAME", text: name });
+	const func = context.__return__;
 
-	const ns = resolveRecursive(context, context.__current__, name, false);
+	[context, argsValue] = resolveArgs(context, args);
 
-	if (ns === false) {
-		throw "Undefined function " + name;
-	} else {
-		const argsValue = (list.length > 1 ? list.slice(1, list.length) : [])
-			.map(e => resolveVar(context, e).__return__);
+	let savedContext = context.__current__;
+	context.__current__ = concatPath(context.__current__, name);
 
-		let savedContext = context.__current__;
-		context.__current__ = concatPath(context.__current__, name);
+	func.__args__.forEach((name, index) => {
+		setDataPath(context, context.__current__, name.text, argsValue[index]);
+	});
 
-		ns.__args__.forEach((name, index) => {
-			setDataPath(context, context.__current__, name.text, argsValue[index]);
-		});
+	let nextContext = executeInstructions(context, func.__instructions__);
+	nextContext.__current__ = savedContext;
 
-		let nextContext = executeInstructions(context, ns.__instructions__);
-		nextContext.__current__ = savedContext;
-
-		return nextContext;
-	}
+	return nextContext;
 };
 
 const callOperator = (context, list) => {
@@ -175,6 +220,7 @@ const callOperator = (context, list) => {
 		case "import": return defineImport(context, list);
 		case "func": return defineFunction(context, list);
 		case "let": return defineVariable(context, list);
+		case "array": return defineArray(context, list);
 		case "sys": return callSys(context, list);
 		case "?": return callTernary(context, list);
 	}

@@ -7,7 +7,8 @@ const resolveRecursive = (object, initPath, initName, defaultValue) => {
 
 	let res;
 	while (true) {
-		res = resolvePath(object, [...path, name].join("."), false);
+		let testPath = [...path, name].join(".")
+		res = resolvePath(object, testPath, false);
 		if (res !== false) return res;
 
 		if (path.length === 0) throw "Cannot find variable " + initPath.filter(e => "" !== e).join(".") + "." + name;

@@ -7,7 +7,7 @@
 >
 
 <func greet_everyones_except <names except> 
-  <<pipe names
+  <<arr.pipe
     <arr.filter <func <name> <!= name except>>>
     <arr.map greeting>
     <arr.join "\n">

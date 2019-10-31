@@ -6,7 +6,10 @@ const { setDataPath, resolveRecursive, concatPath } = require("./utils/vmUtils.j
 
 const resolveArgs = (context, args) => {
 	let argsValue = [];
-	for (let arg of args) {
+	while (true) {
+		arg = args.shift();
+		if (arg === undefined) break;
+
 		context = resolveVar(context, arg);
 		argsValue.push(context.__return__);
 	}
@@ -69,19 +72,23 @@ const operatorFunc = (context, list) => {
 	if (list.length < 3) throw "Wrong number of arguments in func";
 
 	if (Array.isArray(list[1])) {
-		const __args__ = list[1];
+		const __params__ = list[1];
 		const __instructions__ = list.slice(2, list.length);
 		const __name__ = '_' + Math.random().toString(36).substr(2, 9);
+		const __namespace__ = concatPath(context.__current__, __name__);
+		const token = "LAMBDA";
 
-		context.__return__ = { __instructions__, __args__ };
+		context.__return__ = { token, __instructions__, __params__, __name__, __namespace__ };
 	} else {
 		if (list.length < 4) throw "Wrong number of arguments in func " + list[1];
 
-		const __args__ = list[2];
+		const __params__ = list[2];
 		const __instructions__ = list.slice(3, list.length);
 		const __name__ = list[1].text;
+		const __namespace__ = concatPath(context.__current__, __name__);
+		const token = "LAMBDA";
 
-		const func = { __instructions__, __args__, __name__ };
+		const func = { token, __instructions__, __params__, __namespace__, __name__ };
 		setDataPath(context, context.__current__, __name__, func);
 		context.__return__ = func;
 	}
@@ -123,15 +130,10 @@ const operatorArray = (context, list) => {
 	return context;
 };
 
-const operatorPipe = (context, list) => {
-	let functions;
-
-	[context, functions] = resolveArgs(context, list.slice(2, list.length));
-
-	context = resolveVar(context, list[1]);
-	for (let func of functions) {
-		context = executeFunction(context, func, context.__return__);
-	}
+const operatorReduce = (context, list) => {
+	let arr;
+	[context, arr] = resolveArgs(context, list.slice(1, list.length));
+	context.__return__ = arr;
 
 	return context;
 };
@@ -191,13 +193,27 @@ const callArithmetic = (context, list) => {
 	return context;
 };
 
-const executeFunction = (context, func, args) => {
-	let savedContext = context.__current__;
-	context.__current__ = concatPath(context.__current__, func.__name__);
+const callLambda = (context, list) => {
+	context = callFunction(context, list[0]);
+	const func = context.__return__;
+	const args = list.slice(1, list.length);
 
-	func.__args__.forEach((name, index) => {
-		setDataPath(context, context.__current__, name.text, args[index]);
-	});
+	return executeFunction(context, func, args);
+};
+
+const executeFunction = (context, func, args) => {
+	[context, argsValue] = resolveArgs(context, args);
+
+	let index = 0;
+	for (let desc of func.__params__) {
+		setDataPath(context, func.__namespace__, desc.text, argsValue[index]);
+		index++;
+	}
+	setDataPath(context, func.__namespace__, "__arguments__", argsValue);
+	console.log(context);
+
+	let savedContext = context.__current__;
+	context.__current__ = concatPath(func.__namespace__, func.__name__);
 
 	context = executeInstructions(context, func.__instructions__);
 	context.__current__ = savedContext;
@@ -211,14 +227,10 @@ const callFunction = (context, list) => {
 	const name = list[0].text;
 	const args = list.slice(1, list.length);
 
-	context.__return__ = null;
-
 	context = resolveVar(context, { token: "NAME", text: name });
 	const func = context.__return__;
 
-	[context, argsValue] = resolveArgs(context, args);
-
-	return executeFunction(context, func, argsValue);
+	return executeFunction(context, func, args);
 };
 
 const callOperator = (context, list) => {
@@ -231,8 +243,7 @@ const callOperator = (context, list) => {
 		case "array": return operatorArray(context, list);
 		case "sys": return operatorSys(context, list);
 		case "if": return operatorIf(context, list);
-		case "pipe": return operatorPipe(context, list);
-		//case "filter": return operatorFilter(context, list);
+		case "reduce": return operatorReduce(context, list);
 	}
 
 	throw "Undefined operator " + list[0].text;
@@ -249,10 +260,14 @@ const processList = (context, list) => {
 
 	const args = list.slice(1, list.length);
 
+	//console.log(context);
+	console.log("Execute " + JSON.stringify(op));
 	switch (op.token) {
 		case "STRING":
+		case "SPREAD":
 		case "NUMBER": throw `Invalid token ${op.token} in the list (${op.text})`;
 
+		case "LAMBDA": return callLambda(context, list);
 		case "NAME": return callFunction(context, list);
 		case "OPERATOR": return callOperator(context, list);
 		case "ARITHMETIC": return callArithmetic(context, list);

@@ -1,5 +1,5 @@
 // Utils
-const match = (token, regex) => str => {
+const match = (__token__, regex) => str => {
 	const fmtRegex = `^\\s*${regex.source}\\s*`;
 	let res = str.text.match(fmtRegex, 'm');
 	if (res === null) return { error: true, at: str.text };
@@ -8,7 +8,7 @@ const match = (token, regex) => str => {
 		text: str.text.substring(res[0].length, str.text.length),
 		captured: [
 			...str.captured,
-			{ token, text: res[0].trim() },
+			{ __token__, text: res[0].trim() },
 		],
 		error: false,
 	};

@@ -6,10 +6,10 @@ const tokensToAST = array => {
 	while (array.length !== 0) {
 		let data = array.shift();
 
-		if (data.token === "START_LIST") {
+		if (data.__token__ === "START_LIST") {
 			let res = tokensToAST(array);
 			captured.push(res);
-		} else if (data.token === "END_LIST") {
+		} else if (data.__token__ === "END_LIST") {
 			return captured;
 		} else {
 			captured.push(data);

@@ -1,17 +1,18 @@
 <func arr.join <chr>
   <func <arr>
-    <reduce arr
+    <reduce
+      arr
       <func <acc arr> <+ acc chr arr>>
-      <array>
+      ""
     >
   >
 >
 
 <func arr.pipe <>
-  <let args __arguments__>
+  <let functions __arguments__>
   <func <data>
     <reduce
-      __arguments__
+      functions
       <func <acc arr> <arr acc>>
       data
     >
@@ -24,7 +25,8 @@
 
 <func arr.filter <test_func>
   <func <arr>
-    <arr.reduce arr
+    <arr.reduce
+      arr
       <func <acc arr>
         <if <test_func arr>
           <arr.concat <acc <array arr>>>

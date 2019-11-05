@@ -2,37 +2,33 @@ const fs = require("fs");
 const path = require("path");
 
 const ast = require("./ast.js");
-const { getPathAndName, resolveRecursive, setDataPath, concatPath } = require("./utils/vmUtils.js");
+const { getPathAndName, resolveRecursive, setDataPath } = require("./utils/vmUtils.js");
 
 const getVar = (context, data) => {
-	let stacks = [...context.__stack__];
+	let stack = [...context];
 
 	while (true) {
-		let ns = stacks.pop();
+		let ns = stack.pop();
 		if (ns === undefined) break;
 
-		let [path, name] = getPathAndName(context.__current__, data);
+		let [path, name] = getPathAndName(data);
 
-		if (data === "functions") {
-			console.log("--------")
-			console.log(ns)
-		}
 		let res = resolveRecursive(ns, path.join("."), name, undefined);
 
 		if (res !== undefined) return res;
 	}
 
-
 	throw "Unknown variable " + data;
-}
-const setVar = (context, data, value) => {
-	let ns = context.__stack__.pop();
+};
 
-	let [path, name] = getPathAndName(context.__current__, data);
+const setVar = (context, data, value) => {
+	let ns = context.pop();
+
+	let [path, name] = getPathAndName(data);
 
 	setDataPath(ns, path, name, value);
 
-	context.__stack__.push(ns);
+	context.push(ns);
 	return context;
 };
 
@@ -42,8 +38,8 @@ const resolveArgs = (context, args) => {
 		arg = args.shift();
 		if (arg === undefined) break;
 
-		context = resolveToken(context, arg);
-		argsValue.push(context.__return__);
+		[context, res] = resolveToken(context, arg);
+		argsValue.push(res);
 	}
 
 	return [context, argsValue];
@@ -57,15 +53,11 @@ const resolveToken = (context, variable) => {
 	let res;
 	switch (variable.__token__) {
 		case "STRING": 
-			context.__return__ = JSON.parse(variable.text);
-			return context;
+			return [context, JSON.parse(variable.text)];
 		case "NUMBER":
-			context.__return__ = parseInt(variable.text);
-			return context;
+			return [context, parseInt(variable.text)];
 		case "NAME":
-			let data = getVar(context, variable.text);
-			context.__return__ = data;
-			return context;
+			return [context, getVar(context, variable.text)];
 
 	}
 
@@ -75,13 +67,13 @@ const resolveToken = (context, variable) => {
 const executeInstructions = (context, list) => {
 	for (const data of list) {
 		if (Array.isArray(data)) {
-			context = processList(context, data);
+			[context, res] = processList(context, data);
 		} else {
-			context = resolveToken(context, data);
+			[context, res] = resolveToken(context, data);
 		}
 	}
 
-	return context;
+	return [context, res];
 };
 
 const operatorSys = (context, list) => {
@@ -90,39 +82,35 @@ const operatorSys = (context, list) => {
 	[context, path] = resolveArgs(context, list.slice(1, list.length - 1));
 	[context, args] = resolveArgs(context, list[list.length - 1]);
 
-	context.__return__ = path.reduce((acc, arr) => acc[arr], global)(...args);
-	return context;
+	return [context, path.reduce((acc, arr) => acc[arr], global)(...args)];
 };
 
 const operatorFunc = (context, list) => {
+	let func;
 	if (list.length < 3) throw "Wrong number of arguments in func";
 
 	if (Array.isArray(list[1])) {
-		const [path, name] = getPathAndName(context.__current__, '_' + Math.random().toString(36).substr(2, 9));
+		const name = '_' + Math.random().toString(36).substr(2, 9);
 
 		const __params__ = list[1];
 		const __instructions__ = list.slice(2, list.length);
 		const __name__ = name;
 		const __token__ = "LAMBDA";
 
-		const func = { __token__, __instructions__, __params__, __name__ };
-		context.__return__ = func;
+		func = { __token__, __instructions__, __params__, __name__ };
 	} else {
 		if (list.length < 4) throw "Wrong number of arguments in func " + list[1];
 
-		const [path, name] = getPathAndName(context.__current__, list[1].text);
-
 		const __params__ = list[2];
 		const __instructions__ = list.slice(3, list.length);
-		const __name__ = name;
+		const __name__ = list[1].text;
 		const __token__ = "LAMBDA";
 
-		const func = { __token__, __instructions__, __params__, __name__ };
-		setVar(context, __name__, func);
-		context.__return__ = func;
+		func = { __token__, __instructions__, __params__, __name__ };
+		context = setVar(context, __name__, func);
 	}
 
-	return context;
+	return [context, func];
 };
 
 const operatorIf = (context, list) => {
@@ -130,60 +118,60 @@ const operatorIf = (context, list) => {
 	const valid = list[2];
 	const invalid = list[3];
 
-	context = resolveToken(context, condition);
+	[context, result] = resolveToken(context, condition);
 
-	if (context.__return__) {
-		context = resolveToken(context, valid);
+	if (result) {
+		return resolveToken(context, valid);
 	} else {
-		context = resolveToken(context, invalid);
+		return resolveToken(context, invalid);
 	}
-
-	return context;
 };
 
 const operatorLet = (context, list) => {
 	const name = list[1].text;
 	const data = list[2];
 
-	context = resolveToken(context, data);
+	[context, res] = resolveToken(context, data);
 
-	setVar(context, name, context.__return__);
-	return context;
+	context = setVar(context, name, res);
+
+	return [context, res];
 };
 
 const operatorArray = (context, list) => {
-	let arr;
-	[context, arr] = resolveArgs(context, list.slice(1, list.length));
-	context.__return__ = arr;
-
-	return context;
+	return resolveArgs(context, list.slice(1, list.length));
 };
 
 const operatorReduce = (context, list) => {
-	let arr;
-	[context, arr] = resolveArgs(context, list.slice(1, list.length));
-	context.__return__ = arr;
+	let functions, init, val;
 
-	return context;
+	[context, data] = resolveArgs(context, list.slice(1, list.length - 2));
+	[context, func] = resolveToken(context, list[list.length - 2]);
+	[context, init] = resolveToken(context, list[list.length - 1]);
+
+	let res = init;
+	for (let item of data) {
+		[context, res] = executeFunction(context, func, [res, item]);
+	}
+
+	return [context, res];
 };
 
 const operatorImport = (context, list) => {
 	const arg = JSON.parse(list[1].text).split(".");
-	if (context.__path__) {
-		var PATH = context.__path__;
-	} else {
-		throw "No path available";
-	}
+	const PATH = getVar(context, "PATH");
+
+	if (!PATH) throw "No path available";
 
 	for (let currPath of PATH) {
-		const filePath = path.resolve(currPath, context.__current__, ...arg) + ".cr";
+		const filePath = path.resolve(currPath, ...arg) + ".cr";
 
 		try {
 			const data = fs.readFileSync(filePath, 'utf8');
 
 			context = executeInstructions(context, ast(data));
 
-			return context;
+			return [context, filePath];
 		} catch (e) {
 			if (e.code === "ENOENT") continue;
 			throw e;
@@ -218,13 +206,11 @@ const callArithmetic = (context, list) => {
 			throw "Undefined arithmetic" + op;
 	}
 
-	context.__return__ = res;
-	return context;
+	return [context, res];
 };
 
 const callLambda = (context, list) => {
-	context = callFunction(context, list[0]);
-	const func = context.__return__;
+	[context, func] = callFunction(context, list[0]);
 	const args = list.slice(1, list.length);
 
 	return executeFunction(context, func, args);
@@ -233,30 +219,28 @@ const callLambda = (context, list) => {
 const executeFunction = (context, func, args) => {
 	[context, argsValue] = resolveArgs(context, args);
 
-	context.__stack__.push({});
+	context.push({});
 
 	let index = 0;
 	for (let desc of func.__params__) {
-		setVar(context, desc.text, argsValue[index]);
+		context = setVar(context, desc.text, argsValue[index]);
 		index++;
 	}
-	setVar(context, "__arguments__", argsValue);
+	context = setVar(context, "__arguments__", argsValue);
+	context = setVar(context, "__name__", func.__name__);
 
-	context = executeInstructions(context, func.__instructions__);
+	[context, result] = executeInstructions(context, func.__instructions__);
 
-	context.__stack__.pop();
+	context.pop();
 
-	return context;
+	return [context, result];
 };
 
 const callFunction = (context, list) => {
-	let argsValue;
-
 	const name = list[0].text;
 	const args = list.slice(1, list.length);
 
-	context = resolveToken(context, { __token__: "NAME", text: name });
-	const func = context.__return__;
+	[context, func] = resolveToken(context, { __token__: "NAME", text: name });
 
 	return executeFunction(context, func, args);
 };
@@ -280,15 +264,14 @@ const callOperator = (context, list) => {
 const processList = (context, list) => {
 	let op;
 	if (Array.isArray(list[0])) {
-		context = processList(context, list[0]);
-		op = context.__return__;
+		[context, op] = processList(context, list[0]);
 	} else {
 		op = list[0];
 	}
 
 	const args = list.slice(1, list.length);
 
-	//console.log("Execute " + JSON.stringify(op));
+	console.log(JSON.stringify(op));
 	switch (op.__token__) {
 		case "STRING":
 		case "SPREAD":
@@ -304,8 +287,7 @@ const processList = (context, list) => {
 };
 
 module.exports = (path) => {
-	const initialContext = { __path__: path , __current__: "", __stack__: [{}] };
-
+	const initialContext = [{ PATH: path }];
 
 	return tokens => executeInstructions(initialContext, tokens);
 };

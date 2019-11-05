@@ -1,8 +1,5 @@
-const getPathAndName = (part1, part2) => {
-	const fullPath = [
-		...part1.split("."),
-		...part2.split(".").slice(0, part2.length - 1),
-	].filter(e => "" !== e);
+const getPathAndName = part => {
+	const fullPath = part.split(".").filter(e => "" !== e);
 
 	return [
 		fullPath.slice(0, fullPath.length - 1),
@@ -50,4 +47,4 @@ const setPath = (obj, propertyPath, value) => {
 
 const setDataPath = (object, path, name, value) => setPath(object, concatPath(path, name), value);
 
-module.exports = { setDataPath, concatPath, resolveRecursive, getPathAndName };
+module.exports = { setDataPath, resolveRecursive, getPathAndName };

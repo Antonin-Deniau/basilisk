@@ -169,9 +169,7 @@ const operatorImport = (context, list) => {
 		try {
 			const data = fs.readFileSync(filePath, 'utf8');
 
-			context = executeInstructions(context, ast(data));
-
-			return [context, filePath];
+			return executeInstructions(context, ast(data));
 		} catch (e) {
 			if (e.code === "ENOENT") continue;
 			throw e;

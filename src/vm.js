@@ -4,11 +4,24 @@ const path = require("path");
 const ast = require("./ast.js");
 const { getPathAndName, resolveRecursive, setDataPath } = require("./utils/vmUtils.js");
 
+const closurePop = context => {
+	return context;
+};
+
+const closurePush = (context, val) => {
+	return context;
+};
+
+const getClosure = (context, val) => {
+
+
+};
+
 const getVar = (context, data) => {
 	let stack = [...context];
 
 	while (true) {
-		let ns = stack.pop();
+		let ns = closurePop(stack);
 		if (ns === undefined) break;
 
 		let [path, name] = getPathAndName(data);
@@ -22,13 +35,13 @@ const getVar = (context, data) => {
 };
 
 const setVar = (context, data, value) => {
-	let ns = context.pop();
+	let ns = closurePop(context);
 
 	let [path, name] = getPathAndName(data);
 
 	setDataPath(ns, path, name, value);
 
-	context.push(ns);
+	context = closurePush(context, ns);
 	return context;
 };
 
@@ -50,7 +63,6 @@ const resolveToken = (context, variable) => {
 		return processList(context, variable);
 	}
 
-	let res;
 	switch (variable.__token__) {
 		case "STRING": 
 			return [context, JSON.parse(variable.text)];
@@ -65,6 +77,8 @@ const resolveToken = (context, variable) => {
 }
 
 const executeInstructions = (context, list) => {
+	let res;
+
 	for (const data of list) {
 		if (Array.isArray(data)) {
 			[context, res] = processList(context, data);
@@ -143,11 +157,11 @@ const operatorArray = (context, list) => {
 };
 
 const operatorReduce = (context, list) => {
-	let functions, init, val;
+	let func, init, data;
 
-	[context, data] = resolveArgs(context, list.slice(1, list.length - 2));
-	[context, func] = resolveToken(context, list[list.length - 2]);
-	[context, init] = resolveToken(context, list[list.length - 1]);
+	[context, data] = resolveToken(context, list[1]);
+	[context, func] = resolveToken(context, list[2]);
+	[context, init] = resolveToken(context, list[3]);
 
 	let res = init;
 	for (let item of data) {
@@ -217,7 +231,7 @@ const callLambda = (context, list) => {
 const executeFunction = (context, func, args) => {
 	[context, argsValue] = resolveArgs(context, args);
 
-	context.push({});
+	closurePush(context, {});
 
 	let index = 0;
 	for (let desc of func.__params__) {
@@ -229,7 +243,7 @@ const executeFunction = (context, func, args) => {
 
 	[context, result] = executeInstructions(context, func.__instructions__);
 
-	context.pop();
+	context = closurePop(context);
 
 	return [context, result];
 };
@@ -238,7 +252,7 @@ const callFunction = (context, list) => {
 	const name = list[0].text;
 	const args = list.slice(1, list.length);
 
-	[context, func] = resolveToken(context, { __token__: "NAME", text: name });
+	const func = getVar(context, name);
 
 	return executeFunction(context, func, args);
 };
@@ -269,10 +283,9 @@ const processList = (context, list) => {
 
 	const args = list.slice(1, list.length);
 
-	console.log(JSON.stringify(op));
+	//console.log(JSON.stringify(op));
 	switch (op.__token__) {
 		case "STRING":
-		case "SPREAD":
 		case "NUMBER": throw `Invalid __token__ ${op.__token__} in the list (${op.text})`;
 
 		case "LAMBDA": return callLambda(context, list);

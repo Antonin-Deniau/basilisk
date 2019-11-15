@@ -4,43 +4,39 @@ const path = require("path");
 const ast = require("./ast.js");
 const { getPathAndName, resolveRecursive, setDataPath } = require("./utils/vmUtils.js");
 
-const closurePop = context => {
-	return context;
-};
-
-const closurePush = (context, val) => {
-	return context;
-};
-
-const getClosure = (context, val) => {
-
-
+const currentClosure = context => {
+	const ns = resolvePath(context, context.__current__, undefined);
+	return ns;
 };
 
 const getVar = (context, data) => {
-	let stack = [...context];
+	let ns, clo;
+	[clo, currentPath] = currentClosure(context);
 
 	while (true) {
-		let ns = closurePop(stack);
-		if (ns === undefined) break;
+		ns = closureNamespace(clo);
 
 		let [path, name] = getPathAndName(data);
-
 		let res = resolveRecursive(ns, path.join("."), name, undefined);
 
 		if (res !== undefined) return res;
+
+		[clo, currentPath] = prevClosure(context, currentPath);
+		if (clo === undefined) break;
 	}
 
 	throw "Unknown variable " + data;
 };
 
 const setVar = (context, data, value) => {
-	let ns = closurePop(context);
+	[clo, currentPath] = currentClosure(context);
+	ns = getClosureNamespace(clo);
 
 	let [path, name] = getPathAndName(data);
 
 	setDataPath(ns, path, name, value);
 
+	clo = setClosureNamespace(clo, ns);
 	context = closurePush(context, ns);
 	return context;
 };

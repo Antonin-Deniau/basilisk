@@ -29,7 +29,7 @@ const concatPath = (a, ...b) => a === "" ? b.join(".") : [a, ...b].join(".");
 
 const resolvePath = (object, path, defaultValue) => path
    .split('.').filter(e => e !== "")
-   .reduce((o, p) => o && o[p] ? o[p] : defaultValue, object)
+   .reduce((o, p) => o && o.hasOwnProperty(p) ? o[p] : defaultValue, object)
 
 
 const setPath = (obj, propertyPath, value) => {

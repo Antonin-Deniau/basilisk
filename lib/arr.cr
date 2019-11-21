@@ -51,6 +51,6 @@
   >
 >
 
-<func arr.reduce <data func init>
-  <reduce data func init>
+<func arr.reduce <data funct init>
+  <reduce data funct init>
 >

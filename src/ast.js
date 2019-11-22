@@ -19,7 +19,7 @@ const tokensToAST = array => {
 	return captured;
 };
 
-module.exports = data => {
-	const result = tokens({ text: data, captured: [], error: false });
+module.exports = (data, file) => {
+	const result = tokens({ text: data, __file__: file, rest: "", captured: [], error: false });
 	return tokensToAST(result.captured);
 };

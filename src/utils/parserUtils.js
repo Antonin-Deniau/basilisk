@@ -4,11 +4,20 @@ const match = (__token__, regex) => str => {
 	let res = str.text.match(fmtRegex, 'm');
 	if (res === null) return { error: true, at: str.text };
 
+	let rest = str.rest + res[0];
+
 	return {
 		text: str.text.substring(res[0].length, str.text.length),
+		rest,
+		__file__: str.__file__,
 		captured: [
 			...str.captured,
-			{ __token__, text: res[0].trim() },
+			{
+				__token__,
+				__content__: res[0].trim(),
+				__line__: rest.split("\n").length,
+				__file__: str.__file__,
+			},
 		],
 		error: false,
 	};

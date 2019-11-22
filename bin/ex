@@ -15,7 +15,7 @@ try {
 	const data = fs.readFileSync(scriptName, 'utf8');
 	const vm = createVm([corePath, scriptPath]);
 
-	vm(ast(data));
+	vm(ast(data, scriptName));
 } catch (err) {
 	console.error(err)
 }

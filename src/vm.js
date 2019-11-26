@@ -9,7 +9,7 @@ const { getPathAndName, resolveRecursive, setDataPath } = require("./utils/vmUti
 let stack = [];
 class VmError extends Error {
 	constructor(e) {
-		super(`Error: ${e}\n${stack.map(e => `${e.file}:${e.line} ${e.closure}()`).join("\n")}`);
+		super(`Error: ${e}\n\n${stack.map(e => `\t${e.file}:${e.line}\t${e.closure}:${e.func}()`).join("\n")}`);
 	}
 }
 
@@ -70,10 +70,15 @@ const setType = (parnt, __content__) => {
 		case "number": return { ...d, __token__: "NUMBER", __content__ };
 		case "string": return { ...d, __token__: "STRING", __content__ };
 		case "boolean": return { ...d, __token__: "BOOLEAN", __content__ };
-		//case "function": return { ...d, __token__: "LAMBDA", __content__ };
+		case "function": return { ...d, __token__: "NATIVE", __content__ };
 		case "object":
-			if (Array.isArray(__content__)) return { ...d, __token__: "ARRAY", __content__ };
-			return { ...d, __token__: "MAP", __content__ };
+			if (Array.isArray(__content__)) {
+				return {
+					...d,
+					__token__: "ARRAY",
+					__content__: __content__.map(setType),
+				};
+			}
 	}
 
 	throw new VmError(`Invalid type ${typeof __content__} (${__content__})`);
@@ -82,10 +87,12 @@ const setType = (parnt, __content__) => {
 const resolveTokens = vars => vars.map(resolveToken);
 
 const resolveToken = variable => {
+
 	switch (variable.__token__) {
 		case "STRING": 
 			return JSON.parse(variable.__content__);
 		case "BOOLEAN":
+		case "NATIVE":
 			return variable.__content__;
 		case "NUMBER":
 			return parseInt(variable.__content__);
@@ -93,10 +100,10 @@ const resolveToken = variable => {
 			res = context.getVar(variable.__content__);
 			return resolveToken(res)
 		case "ARRAY":
-			return variable.__content__;
+			return resolveTokens(variable.__content__);
 		case "LAMBDA":
 			return (...args) => {
-				let res = executeFunction(variable.__content__, args);
+				let res = executeFunction(variable, variable.__content__, args);
 				return resolveToken(executeInstruction(res));
 			};
 	}
@@ -113,10 +120,10 @@ const executeInstruction = instr => {
 			case "NUMBER":
 			case "ARRAY":
 			case "LAMBDA":
+			case "NATIVE":
 				return instr;
 			case "NAME":
-				let res = context.getVar(instr.__content__);
-				return res;
+				return executeInstruction(context.getVar(instr.__content__));
 		}
 	}
 };
@@ -132,12 +139,11 @@ const executeInstructions = list => {
 };
 
 const operatorSys = list => {
-	let path, args;
+	let path = resolveTokens(list.slice(1, list.length - 1).map(executeInstruction));
+	let args = resolveTokens(list[list.length - 1].map(executeInstruction));
 
-	path = resolveTokens(list.slice(1, list.length - 1));
-	args = resolveTokens(list[list.length - 1]);
+	let res = path.reduce((acc, arr) => acc[arr], global).call(...args);
 
-	let res = path.reduce((acc, arr) => acc[arr], global)(...args);
 	return setType(list[0], res);
 };
 
@@ -146,8 +152,8 @@ const operatorFunc = list => {
 
 	if (list.length < 3) throw new VmError("Wrong number of arguments in func");
 
-	let { __file__, __line__  } = list[0];
-	let d = { __token__: "LAMBDA", __closure__: context, __line__, __file__ };
+	//let { __file__, __line__  } = list[0];
+	let d = { __token__: "LAMBDA", __closure__: context }; //, __line__, __file__ };
 
 	if (Array.isArray(list[1])) {
 		const name = '_' + Math.random().toString(36).substr(2, 9);
@@ -213,22 +219,7 @@ const operatorLet = list => {
 };
 
 const operatorArray = list => {
-	return setType(list[0], resolveArgs(list.slice(1, list.length)));
-};
-
-const operatorReduce = list => {
-	let func, init, data;
-
-	data = executeInstruction(list[1]);
-	func = executeInstruction(list[2]);
-	init = executeInstruction(list[3]);
-
-	let res = init;
-	for (let item of iterateOnArray(data)) {
-		res = executeFunction(func, [res, item]);
-	}
-
-	return res;
+	return setType(list[0], list.slice(1, list.length).map(executeInstruction));
 };
 
 const operatorImport = list => {
@@ -258,7 +249,7 @@ const callArithmetic = list => {
 
 	const op = list[0].__content__;
 
-	data = resolveTokens(resolveArgs(list.slice(1, list.length)));
+	data = resolveTokens(list.slice(1, list.length).map(executeInstruction));
 
 	const args = data.slice(1, data.length);
 	const initial = data[0];
@@ -286,15 +277,20 @@ const callLambda = list => {
 
 	const args = list.slice(1, list.length);
 
-	return executeFunction(func, args);
+	return executeFunction(args[0], func, args); // pas top de mettre args[0]
 };
 
-const executeFunction = (func, args) => {
+const executeFunction = (loc, func, args) => {
 	argsValue = resolveArgs(args);
 
 	backupContext = context;
 
-	stack.push({ file: func.__file__, line: func.__line__, closure: context.name });
+	stack.push({
+		file: loc.__file__,
+		line: loc.__line__,
+		closure: context.name,
+		func: func.__name__,
+	});
 
 	context = func.__closure__;
 
@@ -307,7 +303,6 @@ const executeFunction = (func, args) => {
 		//console.log(`${desc.__content__} = ${inspect(argsValue[index])}`);
 		index++;
 	}
-	//console.log(`__arguments__ = ${inspect(setType(func, argsValue))}`);
 	context.setVar("__arguments__", setType(func, argsValue));
 	context.setVar("__name__", setType(func, func.__name__));
 
@@ -319,6 +314,18 @@ const executeFunction = (func, args) => {
 	return result;
 };
 
+const callNative = list => {
+	const name = list[0].__content__;
+	const args = list.slice(1, list.length);
+
+	const func = context.getVar(name);
+	if (func.__token__ !== "NATIVE") {
+		throw new VmError(`${name} is not a native function (${func.__token__})`);
+	}
+
+	return setType(func.__content__(args));
+};
+
 const callFunction = list => {
 	const name = list[0].__content__;
 	const args = list.slice(1, list.length);
@@ -328,7 +335,7 @@ const callFunction = list => {
 		throw new VmError(`${name} is not a function (${func.__token__})`);
 	}
 
-	let res = executeFunction(func, args);
+	let res = executeFunction(list[0], func, args);
 
 	return res;
 };
@@ -343,7 +350,6 @@ const callOperator = list => {
 		case "array": return operatorArray(list);
 		case "sys": return operatorSys(list);
 		case "if": return operatorIf(list);
-		case "reduce": return operatorReduce(list);
 	}
 
 	throw new VmError("Undefined operator " + list[0].__content__);
@@ -365,9 +371,10 @@ const processList = list => {
 		case "NAME": return callFunction(list);
 		case "OPERATOR": return callOperator(list);
 		case "ARITHMETIC": return callArithmetic(list);
+		case "NATIVE": return callNative(list);
 	}
 
-	throw new VmError("Undefined __token__" + op);
+	throw new VmError("Undefined __token__: " + op);
 };
 
 module.exports = (path) => {
@@ -377,6 +384,7 @@ module.exports = (path) => {
 		try {
 			executeInstructions(tokens);
 		} catch (e) {
+			console.log(e);
 			console.log(e.message);
 		}
 	};

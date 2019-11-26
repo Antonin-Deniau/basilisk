@@ -1,21 +1,16 @@
 <func arr.join <chr>
   <func <arr>
-    <reduce
-      arr
-      <func <acc arr> <+ acc chr arr>>
-      ""
-    >
+    <sys "Array" "prototype" "join" <chr arr>>
   >
 >
 
 <func arr.pipe <>
   <let functions __arguments__>
   <func <data>
-    <reduce
-      functions
+    <<arr.reduce
       <func <acc arr> <arr acc>>
       data
-    >
+    > __arguments__>
   >
 >
 
@@ -25,32 +20,18 @@
 
 <func arr.filter <test_func>
   <func <arr>
-    <arr.reduce
-      arr
-      <func <acc arr>
-        <if <test_func arr>
-          <arr.concat <acc <array arr>>>
-          acc
-        >
-      >
-      <array>
-    >
+    <sys "Array" "prototype" "filter" <arr test_func>>
   >
 >
 
 <func arr.map <map_func>
   <func <arr>
-    <reduce arr
-      <func <acc arr>
-        <sys "Array" "prototype" "concat"
-          <acc <array <map_func arr>>>
-        >
-      >
-      <array>
-    >
+    <sys "Array" "prototype" "map" <arr map_func>>
   >
 >
 
-<func arr.reduce <data funct init>
-  <reduce data funct init>
+<func arr.reduce <funct init>
+  <func <arr>
+    <sys "Array" "prototype" "reduce" <arr funct init>>
+  >
 >

@@ -49,19 +49,6 @@ class Closure {
 
 let context = new Closure(undefined, "__G");
 
-const resolveArgs = args => {
-	let argsValue = [];
-	while (true) {
-		arg = args.shift();
-		if (arg === undefined) break;
-
-		res = executeInstruction(arg);
-		argsValue.push(res);
-	}
-
-	return argsValue;
-};
-
 const setType = (parnt, __content__) => {
 	let { __file__, __line__ } = parnt;
 	let d = { __file__, __line__ };
@@ -76,18 +63,17 @@ const setType = (parnt, __content__) => {
 				return {
 					...d,
 					__token__: "ARRAY",
-					__content__: __content__.map(setType),
+					__content__: __content__.map(e => setType(parnt, e)),
 				};
 			}
 	}
 
-	throw new VmError(`Invalid type ${typeof __content__} (${__content__})`);
+	throw new VmError(`Invalid type ${typeof __content__} (${inspect(__content__)})`);
 };
 
 const resolveTokens = vars => vars.map(resolveToken);
 
 const resolveToken = variable => {
-
 	switch (variable.__token__) {
 		case "STRING": 
 			return JSON.parse(variable.__content__);
@@ -152,15 +138,12 @@ const operatorFunc = list => {
 
 	if (list.length < 3) throw new VmError("Wrong number of arguments in func");
 
-	//let { __file__, __line__  } = list[0];
-	let d = { __token__: "LAMBDA", __closure__: context }; //, __line__, __file__ };
+	let d = { __token__: "LAMBDA", __closure__: context };
 
 	if (Array.isArray(list[1])) {
-		const name = '_' + Math.random().toString(36).substr(2, 9);
-
 		let __params__ = list[1];
 		let __instructions__ = list.slice(2, list.length);
-		let __name__ = name;
+		let __name__ = '_' + Math.random().toString(36).substr(2, 9);
 
 		func = { ...d, __instructions__, __params__, __name__ };
 	} else {
@@ -219,7 +202,7 @@ const operatorLet = list => {
 };
 
 const operatorArray = list => {
-	return setType(list[0], list.slice(1, list.length).map(executeInstruction));
+	return setType(list[0], list.slice(1, list.length).map(resolveToken));
 };
 
 const operatorImport = list => {
@@ -273,16 +256,22 @@ const callArithmetic = list => {
 };
 
 const callLambda = list => {
-	let func = callFunction(list[0]);
-
 	const args = list.slice(1, list.length);
 
-	return executeFunction(args[0], func, args); // pas top de mettre args[0]
+	return executeFunction(args[0], list[0], args); // pas top de mettre args[0]
 };
 
 const executeFunction = (loc, func, args) => {
-	argsValue = resolveArgs(args);
+	let argsValue = [];
+	while (true) {
+		arg = args.shift();
+		if (arg === undefined) break;
 
+		res = executeInstruction(arg);
+		argsValue.push(res);
+	}
+
+	console.log(argsValue);
 	backupContext = context;
 
 	stack.push({
@@ -303,8 +292,8 @@ const executeFunction = (loc, func, args) => {
 		//console.log(`${desc.__content__} = ${inspect(argsValue[index])}`);
 		index++;
 	}
-	context.setVar("__arguments__", setType(func, argsValue));
-	context.setVar("__name__", setType(func, func.__name__));
+	context.setVar("__arguments__", argsValue);
+	context.setVar("__name__", func.__name__);
 
 	result = executeInstructions(func.__instructions__);
 

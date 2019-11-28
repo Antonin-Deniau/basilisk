@@ -284,6 +284,7 @@ const executeFunction = (loc, func, args) => {
 	let index = 0;
 	for (let desc of func.__params__) {
 		context.setVar(desc.__content__, argsValue[index]);
+		if (desc.__content__ === "names") new Debugger().start(context);
 		index++;
 	}
 	context.setVar("__arguments__", argsValue);
@@ -300,7 +301,6 @@ const executeFunction = (loc, func, args) => {
 const callNative = list => {
 	const name = list[0].__content__;
 	const args = list.slice(1, list.length);
-
 
 	const func = context.getVar(name);
 
@@ -382,7 +382,7 @@ module.exports = (path) => {
 		} catch (e) {
 			console.log(e);
 			console.log(e.message);
-			new Debugger().start(context);
+			//new Debugger().start(context);
 		}
 	};
 };

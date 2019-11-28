@@ -280,7 +280,8 @@ async function executeFunction(loc, func, args) {
 		func: func.__name__,
 	});
 
-	backupContext = context;
+	let bk = context.name;
+	let backupContext = context;
 	context = func.__closure__.createClosure(func.__name__);
 
 	let index = 0;
@@ -291,7 +292,6 @@ async function executeFunction(loc, func, args) {
 	context.setVar("__arguments__", argsValue);
 	context.setVar("__name__", func.__name__);
 
-	//await new Debugger().start(context);
 	result = await executeInstructions(func.__instructions__);
 
 	context = backupContext;
@@ -323,8 +323,10 @@ async function callAnonymous(list) {
 
 async function callLambda(list) {
 	const func = await executeInstruction(list[0]);
+
 	const args = list.slice(1, list.length);
 
+	console.log();
 	return await executeFunction(list[0], func, args);
 }
 
@@ -363,7 +365,8 @@ async function processList(list) {
 	switch (op.__token__) {
 		case "STRING":
 		case "NUMBER":
-			throw new VmError(`Invalid __token__ ${op.__token__} in the list (${op.__content__})`);
+		case "ARRAY":
+			throw new VmError(`Invalid __token__ ${op.__token__} in the list (${inspect(op.__content__)})`);
 		case "NAME": return await callFunction(list);
 		case "LAMBDA": return await callAnonymous(list);
 		case "OPERATOR": return await callOperator(list);

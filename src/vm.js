@@ -2,14 +2,15 @@ const { inspect } = require("util");
 const fs = require("fs");
 const path = require("path");
 
+const Debugger = require("./debugger");
 const ast = require("./ast.js");
 const { getPathAndName, resolveRecursive, setDataPath } = require("./utils/vmUtils.js");
-
 
 let stack = [];
 class VmError extends Error {
 	constructor(e) {
-		super(`Error: ${e}\n\n${stack.map(e => `\t${e.file}:${e.line}\t${e.closure}:${e.func}()`).join("\n")}`);
+		let line = e => `\t${e.file}:${e.line}\t${e.closure}:${e.func}()`;
+		super(`Error: ${e}\n${stack.map(line).join("\n")}\n`);
 	}
 }
 
@@ -22,7 +23,7 @@ class Closure {
 	}
 
 	createClosure(name) {
-		return new Closure(this, name, path);
+		return new Closure(this, name);
 	}
 
 	setVar(varName, value) {
@@ -255,13 +256,12 @@ const callArithmetic = list => {
 	return setType(list[0], res);
 };
 
-const callLambda = list => {
-	const args = list.slice(1, list.length);
-
-	return executeFunction(args[0], list[0], args); // pas top de mettre args[0]
-};
-
 const executeFunction = (loc, func, args) => {
+	if (func.__token__ !== "LAMBDA") {
+		throw new VmError(`${typeof func} is not a function (${func.__token__})`);
+	}
+
+
 	let argsValue = [];
 	while (true) {
 		arg = args.shift();
@@ -271,9 +271,6 @@ const executeFunction = (loc, func, args) => {
 		argsValue.push(res);
 	}
 
-	console.log(argsValue);
-	backupContext = context;
-
 	stack.push({
 		file: loc.__file__,
 		line: loc.__line__,
@@ -281,15 +278,12 @@ const executeFunction = (loc, func, args) => {
 		func: func.__name__,
 	});
 
-	context = func.__closure__;
-
-	//console.log(": " + func.__name__);
-	context = context.createClosure(func.__name__);
+	backupContext = context;
+	context = func.__closure__.createClosure(func.__name__);
 
 	let index = 0;
 	for (let desc of func.__params__) {
 		context.setVar(desc.__content__, argsValue[index]);
-		//console.log(`${desc.__content__} = ${inspect(argsValue[index])}`);
 		index++;
 	}
 	context.setVar("__arguments__", argsValue);
@@ -307,7 +301,9 @@ const callNative = list => {
 	const name = list[0].__content__;
 	const args = list.slice(1, list.length);
 
+
 	const func = context.getVar(name);
+
 	if (func.__token__ !== "NATIVE") {
 		throw new VmError(`${name} is not a native function (${func.__token__})`);
 	}
@@ -315,18 +311,28 @@ const callNative = list => {
 	return setType(func.__content__(args));
 };
 
-const callFunction = list => {
-	const name = list[0].__content__;
+
+const callAnonymous = list => {
+	const func = list[0];
 	const args = list.slice(1, list.length);
 
+	return executeFunction(list[0], func, args);
+};
+
+const callLambda = list => {
+	const func = executeInstruction(list[0]);
+	const args = list.slice(1, list.length);
+
+	return executeFunction(list[0], func, args);
+};
+
+const callFunction = list => {
+	const name = list[0].__content__;
+
 	const func = context.getVar(name);
-	if (func.__token__ !== "LAMBDA") {
-		throw new VmError(`${name} is not a function (${func.__token__})`);
-	}
+	const args = list.slice(1, list.length);
 
-	let res = executeFunction(list[0], func, args);
-
-	return res;
+	return executeFunction(list[0], func, args);
 };
 
 const callOperator = list => {
@@ -347,7 +353,7 @@ const callOperator = list => {
 const processList = list => {
 	let op;
 	if (Array.isArray(list[0])) {
-		op = processList(list[0]);
+		return callLambda(list);
 	} else {
 		op = list[0];
 	}
@@ -356,14 +362,15 @@ const processList = list => {
 		case "STRING":
 		case "NUMBER":
 			throw new VmError(`Invalid __token__ ${op.__token__} in the list (${op.__content__})`);
-		case "LAMBDA": return callLambda(list);
 		case "NAME": return callFunction(list);
+		case "LAMBDA": return callAnonymous(list);
 		case "OPERATOR": return callOperator(list);
 		case "ARITHMETIC": return callArithmetic(list);
 		case "NATIVE": return callNative(list);
 	}
 
-	throw new VmError("Undefined __token__: " + op);
+	console.log(inspect(list))
+	throw new VmError("Undefined __token__: " + op.__token__);
 };
 
 module.exports = (path) => {
@@ -375,6 +382,7 @@ module.exports = (path) => {
 		} catch (e) {
 			console.log(e);
 			console.log(e.message);
+			new Debugger().start(context);
 		}
 	};
 };

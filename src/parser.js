@@ -15,9 +15,9 @@ const startList = match("START_LIST", /</);
 const endList = match("END_LIST", />/);
 
 const list = str => seq([
-	startList,
-	loop(choose([atom, list])),
-	endList,
+    startList,
+    loop(choose([atom, list])),
+    endList,
 ])(str);
 
 // Ast

@@ -1,25 +1,25 @@
 const tokens = require("./parser.js");
 
 const tokensToAST = array => {
-	let captured = [];
+    let captured = [];
 
-	while (array.length !== 0) {
-		let data = array.shift();
+    while (array.length !== 0) {
+        let data = array.shift();
 
-		if (data.__token__ === "START_LIST") {
-			let res = tokensToAST(array);
-			captured.push(res);
-		} else if (data.__token__ === "END_LIST") {
-			return captured;
-		} else {
-			captured.push(data);
-		}
-	}
+        if (data.__token__ === "START_LIST") {
+            let res = tokensToAST(array);
+            captured.push(res);
+        } else if (data.__token__ === "END_LIST") {
+            return captured;
+        } else {
+            captured.push(data);
+        }
+    }
 
-	return captured;
+    return captured;
 };
 
 module.exports = (data, file) => {
-	const result = tokens({ text: data, __file__: file, rest: "", captured: [], error: false });
-	return tokensToAST(result.captured);
+    const result = tokens({ text: data, __file__: file, rest: "", captured: [], error: false });
+    return tokensToAST(result.captured);
 };

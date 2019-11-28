@@ -14,7 +14,7 @@ let q = function(q) {
 
 class Debugger {
 	async start(context) {
-		this.context = context;
+		console.log(context.name);
 
 		let stack = [];
 
@@ -26,7 +26,7 @@ class Debugger {
 
 			switch (key) {
 				case "n": 
-					console.log(this.context.name);
+					console.log(context.name);
 					continue;
 				case ">": 
 					let res = stack.pop();
@@ -37,27 +37,27 @@ class Debugger {
 					}
 
 					this.context = res;
-					console.log(this.context.name);
+					console.log(context.name);
 				case "c":
 					console.log("resume...");
 					return;
 				case "<":
-					if (this.context.prev === undefined) {
+					if (context.prev === undefined) {
 						console.log("No previous closure");
 						continue;
 					}
-					stack.push(this.context);
-					this.context = this.context.prev;
-					console.log(this.context.name);
+					stack.push(context);
+					context = context.prev;
+					console.log(context.name);
 					continue;
 				case "q":
 					process.exit();
 				case "=":
 					try {
 						if (value === "") {
-							console.log(inspect(this.context.data));
+							console.log(inspect(context.data));
 						} else {
-							console.log(inspect(this.context.getVar(value)));
+							console.log(inspect(context.getVar(value)));
 						}
 					} catch(e) {
 						console.log(e);

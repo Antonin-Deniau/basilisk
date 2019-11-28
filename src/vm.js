@@ -128,8 +128,8 @@ async function executeInstructions(list) {
 };
 
 async function operatorSys(list) {
-	let path = await Promise.all(...resolveTokens(list.slice(1, list.length - 1).map(executeInstruction)));
-	let args = await Promise.all(...resolveTokens(list[list.length - 1].map(executeInstruction)));
+	let path = resolveTokens(await Promise.all(list.slice(1, list.length - 1).map(executeInstruction)));
+	let args = resolveTokens(await Promise.all(list[list.length - 1].map(executeInstruction)));
 
 	let res = path.reduce((acc, arr) => acc[arr], global).call(...args);
 
@@ -235,7 +235,7 @@ async function callArithmetic(list) {
 
 	const op = list[0].__content__;
 
-	data = await Promise.all(...resolveTokens(list.slice(1, list.length).map(executeInstruction)));
+	data = resolveTokens(await Promise.all(list.slice(1, list.length).map(executeInstruction)));
 
 	const args = data.slice(1, data.length);
 	const initial = data[0];
@@ -291,7 +291,7 @@ async function executeFunction(loc, func, args) {
 	context.setVar("__arguments__", argsValue);
 	context.setVar("__name__", func.__name__);
 
-	await new Debugger().start(context);
+	//await new Debugger().start(context);
 	result = await executeInstructions(func.__instructions__);
 
 	context = backupContext;

@@ -72,9 +72,11 @@ const setType = (parnt, __content__) => {
 	throw new VmError(`Invalid type ${typeof __content__} (${inspect(__content__)})`);
 };
 
-const resolveTokens = vars => vars.map(resolveToken);
+function resolveTokens(vars) {
+	return vars.map(resolveToken);
+}
 
-const resolveToken = variable => {
+function resolveToken(variable) {
 	switch (variable.__token__) {
 		case "STRING": 
 			return JSON.parse(variable.__content__);
@@ -89,18 +91,18 @@ const resolveToken = variable => {
 		case "ARRAY":
 			return resolveTokens(variable.__content__);
 		case "LAMBDA":
-			return (...args) => {
-				let res = executeFunction(variable, variable.__content__, args);
-				return resolveToken(executeInstruction(res));
+			return async function(...args) {
+				let res = await executeFunction(variable, variable.__content__, args);
+				return resolveToken(await executeInstruction(res));
 			};
 	}
 
 	throw new VmError(`Invalid variable type ${variable.__token__} (${inspect(variable.__content__)})`);
 }
 
-const executeInstruction = instr => {
+async function executeInstruction(instr) {
 	if (Array.isArray(instr)) {
-		return processList(instr);
+		return await processList(instr);
 	} else {
 		switch (instr.__token__) {
 			case "STRING": 
@@ -110,31 +112,31 @@ const executeInstruction = instr => {
 			case "NATIVE":
 				return instr;
 			case "NAME":
-				return executeInstruction(context.getVar(instr.__content__));
+				return await executeInstruction(context.getVar(instr.__content__));
 		}
 	}
 };
 
-const executeInstructions = list => {
+async function executeInstructions(list) {
 	let res;
 
 	for (const data of list) {
-		res = executeInstruction(data);
+		res = await executeInstruction(data);
 	}
 
 	return res;
 };
 
-const operatorSys = list => {
-	let path = resolveTokens(list.slice(1, list.length - 1).map(executeInstruction));
-	let args = resolveTokens(list[list.length - 1].map(executeInstruction));
+async function operatorSys(list) {
+	let path = await Promise.all(...resolveTokens(list.slice(1, list.length - 1).map(executeInstruction)));
+	let args = await Promise.all(...resolveTokens(list[list.length - 1].map(executeInstruction)));
 
 	let res = path.reduce((acc, arr) => acc[arr], global).call(...args);
 
 	return setType(list[0], res);
 };
 
-const operatorFunc = list => {
+function operatorFunc(list) {
 	let func;
 
 	if (list.length < 3) throw new VmError("Wrong number of arguments in func");
@@ -162,24 +164,24 @@ const operatorFunc = list => {
 	return func;
 };
 
-const operatorIf = list => {
+async function operatorIf(list) {
 	const condition = list[1];
 	const valid = list[2];
 	const invalid = list[3];
 
-	result = resolveToken(executeInstruction(condition));
+	result = resolveToken(await executeInstruction(condition));
 
 	let res; 
 	if (result) {
-		res = executeInstruction(valid);
+		res = await executeInstruction(valid);
 	} else {
-		res = executeInstruction(invalid);
+		res = await executeInstruction(invalid);
 	}
 
 	return res;
 };
 
-const iterateOnArray = list => {
+function iterateOnArray(list) {
 	if (list.__token__ !== "ARRAY") throw new VmError(`${inspect(list)} is not an array`);
 
 	let a = {};
@@ -191,22 +193,22 @@ const iterateOnArray = list => {
 	return a;
 }
 
-const operatorLet = list => {
+async function operatorLet(list) {
 	const name = list[1].__content__;
 	const data = list[2];
 
-	res = executeInstruction(data);
+	res = await executeInstruction(data);
 
 	context.setVar(name, res);
 
 	return res;
 };
 
-const operatorArray = list => {
+function operatorArray(list) {
 	return setType(list[0], list.slice(1, list.length).map(resolveToken));
 };
 
-const operatorImport = list => {
+async function operatorImport(list) {
 	const arg = JSON.parse(list[1].__content__).split(".");
 	const PATH = context.getVar("PATH");
 
@@ -218,7 +220,7 @@ const operatorImport = list => {
 		try {
 			const data = fs.readFileSync(filePath, 'utf8');
 
-			return executeInstructions(ast(data, filePath));
+			return await executeInstructions(ast(data, filePath));
 		} catch (e) {
 			if (e.code === "ENOENT") continue;
 			throw new VmError(e);
@@ -228,12 +230,12 @@ const operatorImport = list => {
 	throw new VmError("Unknow file " + arg.join("."));
 };
 
-const callArithmetic = list => {
+async function callArithmetic(list) {
 	let dataValues;
 
 	const op = list[0].__content__;
 
-	data = resolveTokens(list.slice(1, list.length).map(executeInstruction));
+	data = await Promise.all(...resolveTokens(list.slice(1, list.length).map(executeInstruction)));
 
 	const args = data.slice(1, data.length);
 	const initial = data[0];
@@ -256,7 +258,7 @@ const callArithmetic = list => {
 	return setType(list[0], res);
 };
 
-const executeFunction = (loc, func, args) => {
+async function executeFunction(loc, func, args) {
 	if (func.__token__ !== "LAMBDA") {
 		throw new VmError(`${typeof func} is not a function (${func.__token__})`);
 	}
@@ -267,7 +269,7 @@ const executeFunction = (loc, func, args) => {
 		arg = args.shift();
 		if (arg === undefined) break;
 
-		res = executeInstruction(arg);
+		res = await executeInstruction(arg);
 		argsValue.push(res);
 	}
 
@@ -284,13 +286,13 @@ const executeFunction = (loc, func, args) => {
 	let index = 0;
 	for (let desc of func.__params__) {
 		context.setVar(desc.__content__, argsValue[index]);
-		if (desc.__content__ === "names") new Debugger().start(context);
 		index++;
 	}
 	context.setVar("__arguments__", argsValue);
 	context.setVar("__name__", func.__name__);
 
-	result = executeInstructions(func.__instructions__);
+	await new Debugger().start(context);
+	result = await executeInstructions(func.__instructions__);
 
 	context = backupContext;
 
@@ -298,7 +300,7 @@ const executeFunction = (loc, func, args) => {
 	return result;
 };
 
-const callNative = list => {
+function callNative(list) {
 	const name = list[0].__content__;
 	const args = list.slice(1, list.length);
 
@@ -309,51 +311,51 @@ const callNative = list => {
 	}
 
 	return setType(func.__content__(args));
-};
+}
 
 
-const callAnonymous = list => {
+async function callAnonymous(list) {
 	const func = list[0];
 	const args = list.slice(1, list.length);
 
-	return executeFunction(list[0], func, args);
-};
+	return await executeFunction(list[0], func, args);
+}
 
-const callLambda = list => {
-	const func = executeInstruction(list[0]);
+async function callLambda(list) {
+	const func = await executeInstruction(list[0]);
 	const args = list.slice(1, list.length);
 
-	return executeFunction(list[0], func, args);
-};
+	return await executeFunction(list[0], func, args);
+}
 
-const callFunction = list => {
+async function callFunction(list) {
 	const name = list[0].__content__;
 
 	const func = context.getVar(name);
 	const args = list.slice(1, list.length);
 
-	return executeFunction(list[0], func, args);
-};
+	return await executeFunction(list[0], func, args);
+}
 
-const callOperator = list => {
+async function callOperator(list) {
 	const symbol = list[0].__content__;
 
 	switch (symbol) {
-		case "import": return operatorImport(list);
+		case "import": return await operatorImport(list);
 		case "func": return operatorFunc(list);
-		case "let": return operatorLet(list);
+		case "let": return await operatorLet(list);
 		case "array": return operatorArray(list);
-		case "sys": return operatorSys(list);
-		case "if": return operatorIf(list);
+		case "sys": return await operatorSys(list);
+		case "if": return await operatorIf(list);
 	}
 
 	throw new VmError("Undefined operator " + list[0].__content__);
-};
+}
 
-const processList = list => {
+async function processList(list) {
 	let op;
 	if (Array.isArray(list[0])) {
-		return callLambda(list);
+		return await callLambda(list);
 	} else {
 		op = list[0];
 	}
@@ -362,23 +364,22 @@ const processList = list => {
 		case "STRING":
 		case "NUMBER":
 			throw new VmError(`Invalid __token__ ${op.__token__} in the list (${op.__content__})`);
-		case "NAME": return callFunction(list);
-		case "LAMBDA": return callAnonymous(list);
-		case "OPERATOR": return callOperator(list);
-		case "ARITHMETIC": return callArithmetic(list);
+		case "NAME": return await callFunction(list);
+		case "LAMBDA": return await callAnonymous(list);
+		case "OPERATOR": return await callOperator(list);
+		case "ARITHMETIC": return await callArithmetic(list);
 		case "NATIVE": return callNative(list);
 	}
 
-	console.log(inspect(list))
 	throw new VmError("Undefined __token__: " + op.__token__);
-};
+}
 
-module.exports = (path) => {
+module.exports = path => {
 	context.setVar("PATH", path)
 
-	return tokens => {
+	return async function (tokens) {
 		try {
-			executeInstructions(tokens);
+			await executeInstructions(tokens);
 		} catch (e) {
 			console.log(e);
 			console.log(e.message);

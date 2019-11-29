@@ -358,16 +358,25 @@ function processList(list) {
     throw new VmError("Undefined __token__: " + op.__token__);
 }
 
-module.exports = (tokens, additionalsPath = []) => {
+class Vm {
+  constructor(tokens, additionalsPath = []) {
+    this.tokens = tokens;
+    this.additionalsPath = additionalsPath;
+  }
+
+  run() {
     const corePath = path.resolve(__dirname, "..", "lib");
 
-    context.setVar("PATH", [...additionalsPath, corePath]);
+    context.setVar("PATH", [...this.additionalsPath, corePath]);
 
     try {
-        return executeInstructions(tokens);
+        return executeInstructions(this.tokens);
     } catch (e) {
         console.log(e);
         console.log(e.message);
         //new Debugger().start(context);
     }
-};
+  }
+}
+
+module.exports = Vm;

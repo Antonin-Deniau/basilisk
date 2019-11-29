@@ -3,10 +3,10 @@ const path = require("path");
 let assert = require('assert');
 
 const ast = require("../src/ast.js");
-const vm = require("../src/vm.js");
+const Vm = require("../src/vm.js");
 
 
-const exec = d => vm(ast(d, "<test_script>"));
+const exec = d => new Vm(ast(d, "<test_script>")).run();
 
 describe('Types', function() {
   describe('#array', function() {

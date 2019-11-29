@@ -13,7 +13,7 @@ try {
     const data = fs.readFileSync(scriptName, "utf8");
     const tokens = ast(data, scriptName);
 
-    vm(tokens, [scriptPath]);
+    new Vm().run(tokens, [scriptPath]);
 } catch (err) {
     console.error(err);
 }

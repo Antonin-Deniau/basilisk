@@ -19,6 +19,7 @@ describe('Types', function() {
               { __token__: "STRING", __content__: "a" },
           ],
       };
+
       assert.deepEqual(exec('<array 1 2 "a">'), expected);
     });
 

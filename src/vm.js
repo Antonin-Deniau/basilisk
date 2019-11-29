@@ -2,9 +2,11 @@ const { inspect } = require("util");
 const fs = require("fs");
 const path = require("path");
 
-const Debugger = require("./debugger");
 const ast = require("./ast.js");
-const { getPathAndName, resolveRecursive, setDataPath } = require("./utils/vmUtils.js");
+
+const Closure = require("./vm/closure");
+const Debugger = require("./vm/debugger");
+const VmError = require("./vm/error");
 
 /**
  * @typedef StackEntry - Stack line
@@ -20,85 +22,14 @@ const { getPathAndName, resolveRecursive, setDataPath } = require("./utils/vmUti
  * @type {StackEntry[]}
  */
 
-/** @type Stack */
-let stack = [];
-
-/** The vm error */
-class VmError extends Error {
-    /**
-     * Instantiate the error
-     *
-     * @param {Stack} e - The stack of the app 
-     */
-    constructor(e) {
-        let line = e => `\t${e.file}:${e.line}\t${e.closure}:${e.func}()`;
-        super(`Error: ${e}\n${stack.map(line).join("\n")}\n`);
-    }
-}
-
 /**
  * @typedef {object} Var - A vm variable
  * @property {string} __token__ - Variable type.
  * @property {any} __content__ - The content of the variable.
  */
 
-/**
- * @namespace - The closure
- */
-class Closure {
-    /**
-     * Instantiate a new closure
-     * 
-     * @param {Closure|null} prev - Previous closure
-     * @param {string} name - Name of the closure
-     */
-    constructor(prev, name) {
-        /** @property {Closure} prev - The previous closure */
-        this.prev = prev;
-
-        /** @property {string} name - The closure name */
-        this.name = name;
-
-        /** @property {Object.<string, Var>} data - The closure variables */ 
-        this.data = {};
-    }
-
-    /**
-     * Create a new closure
-     * 
-     * @param {string} name
-     * @returns {Closure} 
-     */
-    createClosure(name) {
-        return new Closure(this, name);
-    }
-
-    /**
-     * 
-     * @param {string} varName 
-     * @param {Var} value 
-     */
-    setVar(varName, value) {
-        let [path, name] = getPathAndName(varName);
-        setDataPath(this.data, path, name, value);
-    }
-
-    getVar(varName) {
-        let clo = this;
-
-        while (true) {
-            let [path, name] = getPathAndName(varName);
-            let res = resolveRecursive(clo.data, path.join("."), name, undefined);
-
-            if (res !== undefined) return res;
-
-            clo = clo.prev;
-            if (clo === undefined) break;
-        }
-
-        throw new VmError("Unknown variable " + varName);
-    }
-}
+/** @type Stack */
+let stack = [];
 
 let context = new Closure(undefined, "__G");
 
@@ -125,6 +56,9 @@ function resolveTokens(vars) {
 }
 
 function resolveToken(variable) {
+
+/** @type Stack */
+let stack = [];
     switch (variable.__token__) {
     case "STRING": 
     case "BOOLEAN":

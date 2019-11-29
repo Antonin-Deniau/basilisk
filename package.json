@@ -2,15 +2,12 @@
   "name": "basilisk",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
-  "directories": {
-    "lib": "lib"
-  },
+  "main": "bin/basl",
   "bin": {
-    "basl": "bin/basl" 
+    "basl": "bin/basl"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "repository": {
     "type": "git",
@@ -22,7 +19,8 @@
     "url": "https://github.com/Antonin-Deniau/basilisk/issues"
   },
   "homepage": "https://github.com/Antonin-Deniau/basilisk#readme",
-  "dependencies": {
+  "devDependencies": {
+    "mocha": "^6.2.2",
     "eslint": "^6.7.1"
   }
 }

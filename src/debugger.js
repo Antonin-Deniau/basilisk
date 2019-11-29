@@ -36,8 +36,9 @@ class Debugger {
                     continue;
                 }
 
-                this.context = res;
+                context = res;
                 console.log(context.name);
+                continue;
             case "c":
                 console.log("resume...");
                 return;

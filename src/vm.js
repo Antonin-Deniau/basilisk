@@ -129,14 +129,13 @@ function resolveTokens(vars) {
 }
 
 function resolveToken(variable) {
+    console.log(variable)
     switch (variable.__token__) {
     case "STRING": 
-        return JSON.parse(variable.__content__);
     case "BOOLEAN":
     case "NATIVE":
-        return variable.__content__;
     case "NUMBER":
-        return parseInt(variable.__content__);
+        return variable.__content__;
     case "NAME":
         res = context.getVar(variable.__content__);
         return resolveToken(res);
@@ -164,7 +163,10 @@ async function executeInstruction(instr) {
         case "NATIVE":
             return instr;
         case "NAME":
-            return await executeInstruction(context.getVar(instr.__content__));
+                //console.log(instr.__content__);
+            let a = context.getVar(instr.__content__);
+                //console.log(inspect(a));
+            return await executeInstruction(a);
         }
     }
 };
@@ -257,11 +259,11 @@ async function operatorLet(list) {
 };
 
 function operatorArray(list) {
-    return setType(list[0], list.slice(1, list.length).map(resolveToken));
+    return setType(list[0], resolveTokens(list.slice(1, list.length)));
 };
 
 async function operatorImport(list) {
-    const arg = JSON.parse(list[1].__content__).split(".");
+    const arg = list[1].__content__.split(".");
     const PATH = context.getVar("PATH");
 
     if (!PATH) throw new VmError("No path available");
@@ -341,8 +343,8 @@ async function executeFunction(loc, func, args) {
         context.setVar(desc.__content__, argsValue[index]);
         index++;
     }
-    context.setVar("__arguments__", argsValue);
-    context.setVar("__name__", func.__name__);
+    context.setVar("__arguments__", setType(resolveTokens(argsValue)));
+    context.setVar("__name__", setType(func.__name__));
 
     result = await executeInstructions(func.__instructions__);
 
@@ -378,7 +380,6 @@ async function callLambda(list) {
 
     const args = list.slice(1, list.length);
 
-    console.log();
     return await executeFunction(list[0], func, args);
 }
 
@@ -418,7 +419,7 @@ async function processList(list) {
     case "STRING":
     case "NUMBER":
     case "ARRAY":
-        throw new VmError(`Invalid __token__ ${op.__token__} in the list (${inspect(op.__content__)})`);
+        throw new VmError(`Invalid __token__ ${op.__token__} in the list (${inspect(op)})`);
     case "NAME": return await callFunction(list);
     case "LAMBDA": return await callAnonymous(list);
     case "OPERATOR": return await callOperator(list);
@@ -438,7 +439,7 @@ module.exports = path => {
         } catch (e) {
             console.log(e);
             console.log(e.message);
-            //new Debugger().start(context);
+            new Debugger().start(context);
         }
     };
 };

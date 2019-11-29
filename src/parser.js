@@ -1,8 +1,8 @@
 const { loop, seq, choose, match } = require("./utils/parserUtils.js");
 
 // Simple Atoms
-const string = match("STRING", /"([^"\\]|\\.)*"/);
-const number = match("NUMBER", /[1-9](\d+)?(\.\d+)?/);
+const string = match("STRING", /"([^"\\]|\\.)*"/, e => JSON.parse(e));
+const number = match("NUMBER", /[1-9](\d+)?(\.\d+)?/, e => parseInt(e));
 const name = match("NAME", /\b([_A-z]([_A-z1-9]+)?)(\.[_A-z]([_A-z1-9]+)?){0,}\b/);
 const operator = match("OPERATOR", /\b(if|func|import|let|array|sys)\b/);
 const arithmetic = match("ARITHMETIC", /(\+|-|\*|\||\/|\&|==|\!=|\!)/);

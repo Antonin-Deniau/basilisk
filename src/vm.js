@@ -102,21 +102,17 @@ class Closure {
 
 let context = new Closure(undefined, "__G");
 
-const setType = (parnt, __content__) => {
-    let { __file__, __line__ } = parnt;
-    let d = { __file__, __line__ };
-
+const setType = __content__ => {
     switch (typeof __content__) {
-    case "number": return { ...d, __token__: "NUMBER", __content__ };
-    case "string": return { ...d, __token__: "STRING", __content__ };
-    case "boolean": return { ...d, __token__: "BOOLEAN", __content__ };
-    case "function": return { ...d, __token__: "NATIVE", __content__ };
+    case "number": return { __token__: "NUMBER", __content__ };
+    case "string": return { __token__: "STRING", __content__ };
+    case "boolean": return { __token__: "BOOLEAN", __content__ };
+    case "function": return { __token__: "NATIVE", __content__ };
     case "object":
         if (Array.isArray(__content__)) {
             return {
-                ...d,
                 __token__: "ARRAY",
-                __content__: __content__.map(e => setType(parnt, e)),
+                __content__: __content__.map(setType),
             };
         }
     }
@@ -129,31 +125,31 @@ function resolveTokens(vars) {
 }
 
 function resolveToken(variable) {
-    console.log(variable)
     switch (variable.__token__) {
     case "STRING": 
     case "BOOLEAN":
     case "NATIVE":
     case "NUMBER":
+    case "UNDEFINED":
         return variable.__content__;
     case "NAME":
-        res = context.getVar(variable.__content__);
+        let res = context.getVar(variable.__content__);
         return resolveToken(res);
     case "ARRAY":
         return resolveTokens(variable.__content__);
     case "LAMBDA":
-        return async function(...args) {
-            let res = await executeFunction(variable, variable.__content__, args);
-            return resolveToken(await executeInstruction(res));
+        return function(...args) {
+            let res = executeFunction(variable, variable.__content__, args);
+            return resolveToken(executeInstruction(res));
         };
     }
 
     throw new VmError(`Invalid variable type ${variable.__token__} (${inspect(variable.__content__)})`);
 }
 
-async function executeInstruction(instr) {
+function executeInstruction(instr) {
     if (Array.isArray(instr)) {
-        return await processList(instr);
+        return processList(instr);
     } else {
         switch (instr.__token__) {
         case "STRING": 
@@ -161,33 +157,32 @@ async function executeInstruction(instr) {
         case "ARRAY":
         case "LAMBDA":
         case "NATIVE":
+        case "UNDEFINED":
             return instr;
         case "NAME":
-                //console.log(instr.__content__);
             let a = context.getVar(instr.__content__);
-                //console.log(inspect(a));
-            return await executeInstruction(a);
+            return executeInstruction(a);
         }
     }
 };
 
-async function executeInstructions(list) {
+function executeInstructions(list) {
     let res;
 
     for (const data of list) {
-        res = await executeInstruction(data);
+        res = executeInstruction(data);
     }
 
     return res;
 };
 
-async function operatorSys(list) {
-    let path = resolveTokens(await Promise.all(list.slice(1, list.length - 1).map(executeInstruction)));
-    let args = resolveTokens(await Promise.all(list[list.length - 1].map(executeInstruction)));
+function operatorSys(list) {
+    let path = resolveTokens(list.slice(1, list.length - 1).map(executeInstruction));
+    let args = resolveTokens(list[list.length - 1].map(executeInstruction));
 
     let res = path.reduce((acc, arr) => acc[arr], global).call(...args);
 
-    return setType(list[0], res);
+    return setType(res);
 };
 
 function operatorFunc(list) {
@@ -218,18 +213,18 @@ function operatorFunc(list) {
     return func;
 };
 
-async function operatorIf(list) {
+function operatorIf(list) {
     const condition = list[1];
     const valid = list[2];
     const invalid = list[3];
 
-    result = resolveToken(await executeInstruction(condition));
+    result = resolveToken(executeInstruction(condition));
 
     let res; 
     if (result) {
-        res = await executeInstruction(valid);
+        res = executeInstruction(valid);
     } else {
-        res = await executeInstruction(invalid);
+        res = executeInstruction(invalid);
     }
 
     return res;
@@ -247,11 +242,11 @@ function iterateOnArray(list) {
     return a;
 }
 
-async function operatorLet(list) {
+function operatorLet(list) {
     const name = list[1].__content__;
     const data = list[2];
 
-    res = await executeInstruction(data);
+    res = executeInstruction(data);
 
     context.setVar(name, res);
 
@@ -259,10 +254,10 @@ async function operatorLet(list) {
 };
 
 function operatorArray(list) {
-    return setType(list[0], resolveTokens(list.slice(1, list.length)));
+    return setType(resolveTokens(list.slice(1, list.length)));
 };
 
-async function operatorImport(list) {
+function operatorImport(list) {
     const arg = list[1].__content__.split(".");
     const PATH = context.getVar("PATH");
 
@@ -274,7 +269,7 @@ async function operatorImport(list) {
         try {
             const data = fs.readFileSync(filePath, "utf8");
 
-            return await executeInstructions(ast(data, filePath));
+            return executeInstructions(ast(data, filePath));
         } catch (e) {
             if (e.code === "ENOENT") continue;
             throw new VmError(e);
@@ -284,12 +279,12 @@ async function operatorImport(list) {
     throw new VmError("Unknow file " + arg.join("."));
 };
 
-async function callArithmetic(list) {
+function callArithmetic(list) {
     let dataValues;
 
     const op = list[0].__content__;
 
-    data = resolveTokens(await Promise.all(list.slice(1, list.length).map(executeInstruction)));
+    data = resolveTokens(list.slice(1, list.length).map(executeInstruction));
 
     const args = data.slice(1, data.length);
     const initial = data[0];
@@ -309,21 +304,20 @@ async function callArithmetic(list) {
         throw new VmError("Undefined arithmetic" + op);
     }
 
-    return setType(list[0], res);
+    return setType(res);
 };
 
-async function executeFunction(loc, func, args) {
+function executeFunction(loc, func, args) {
     if (func.__token__ !== "LAMBDA") {
         throw new VmError(`${typeof func} is not a function (${func.__token__})`);
     }
-
 
     let argsValue = [];
     while (true) {
         arg = args.shift();
         if (arg === undefined) break;
 
-        res = await executeInstruction(arg);
+        res = executeInstruction(arg);
         argsValue.push(res);
     }
 
@@ -346,7 +340,7 @@ async function executeFunction(loc, func, args) {
     context.setVar("__arguments__", setType(resolveTokens(argsValue)));
     context.setVar("__name__", setType(func.__name__));
 
-    result = await executeInstructions(func.__instructions__);
+    result = executeInstructions(func.__instructions__);
 
     context = backupContext;
 
@@ -368,49 +362,49 @@ function callNative(list) {
 }
 
 
-async function callAnonymous(list) {
+function callAnonymous(list) {
     const func = list[0];
     const args = list.slice(1, list.length);
 
-    return await executeFunction(list[0], func, args);
+    return executeFunction(list[0], func, args);
 }
 
-async function callLambda(list) {
-    const func = await executeInstruction(list[0]);
+function callLambda(list) {
+    const func = executeInstruction(list[0]);
 
     const args = list.slice(1, list.length);
 
-    return await executeFunction(list[0], func, args);
+    return executeFunction(list[0], func, args);
 }
 
-async function callFunction(list) {
+function callFunction(list) {
     const name = list[0].__content__;
 
     const func = context.getVar(name);
     const args = list.slice(1, list.length);
 
-    return await executeFunction(list[0], func, args);
+    return executeFunction(list[0], func, args);
 }
 
-async function callOperator(list) {
+function callOperator(list) {
     const symbol = list[0].__content__;
 
     switch (symbol) {
-    case "import": return await operatorImport(list);
+    case "import": return operatorImport(list);
     case "func": return operatorFunc(list);
-    case "let": return await operatorLet(list);
+    case "let": return operatorLet(list);
     case "array": return operatorArray(list);
-    case "sys": return await operatorSys(list);
-    case "if": return await operatorIf(list);
+    case "sys": return operatorSys(list);
+    case "if": return operatorIf(list);
     }
 
     throw new VmError("Undefined operator " + list[0].__content__);
 }
 
-async function processList(list) {
+function processList(list) {
     let op;
     if (Array.isArray(list[0])) {
-        return await callLambda(list);
+        return callLambda(list);
     } else {
         op = list[0];
     }
@@ -420,10 +414,10 @@ async function processList(list) {
     case "NUMBER":
     case "ARRAY":
         throw new VmError(`Invalid __token__ ${op.__token__} in the list (${inspect(op)})`);
-    case "NAME": return await callFunction(list);
-    case "LAMBDA": return await callAnonymous(list);
-    case "OPERATOR": return await callOperator(list);
-    case "ARITHMETIC": return await callArithmetic(list);
+    case "NAME": return callFunction(list);
+    case "LAMBDA": return callAnonymous(list);
+    case "OPERATOR": return callOperator(list);
+    case "ARITHMETIC": return callArithmetic(list);
     case "NATIVE": return callNative(list);
     }
 
@@ -433,13 +427,13 @@ async function processList(list) {
 module.exports = path => {
     context.setVar("PATH", path);
 
-    return async function (tokens) {
+    return function (tokens) {
         try {
-            await executeInstructions(tokens);
+            executeInstructions(tokens);
         } catch (e) {
             console.log(e);
             console.log(e.message);
-            new Debugger().start(context);
+            //new Debugger().start(context);
         }
     };
 };

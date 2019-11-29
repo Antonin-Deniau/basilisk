@@ -1,3 +1,5 @@
+<import "io">
+
 <func arr.join <chr>
   <func <arr>
     <sys "Array" "prototype" "join" <chr arr>>
@@ -6,6 +8,7 @@
 
 <func arr.pipe <>
   <let functions __arguments__>
+
   <func <data>
     <<arr.reduce
       <func <acc arr> <arr acc>>
@@ -30,8 +33,8 @@
   >
 >
 
-<func arr.reduce <funct init>
-  <func <arr>
+<func arr.reduce <funct arr>
+  <func <init>
     <sys "Array" "prototype" "reduce" <arr funct init>>
   >
 >

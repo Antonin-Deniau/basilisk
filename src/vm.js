@@ -333,8 +333,6 @@ class Vm {
      * @returns {Var<any>} - The variable returned
      */
     callArithmetic(list) {
-        let dataValues;
-
         const op = list[0].__content__;
 
         let data = this.resolveTokens(list.slice(1, list.length).map(this.executeInstruction));
@@ -363,9 +361,9 @@ class Vm {
     /**
      * Execute function
      * 
-     * @param {Var<any>} loc - The instruction list
-     * @param {Var<FunctionData>} func - The instruction list
-     * @param {Instruction[]} args - The instruction list
+     * @param {Var<any>} loc - The function location
+     * @param {Var<FunctionData>} func - The function
+     * @param {Instruction[]} args - The arguments
      * @returns {Var<any>} - The variable returned
      */
     executeFunction(loc, func, args) {
@@ -408,6 +406,12 @@ class Vm {
         return result;
     }
 
+    /**
+     * Call native js function
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     callNative(list) {
         const name = list[0].__content__;
         const args = list.slice(1, list.length);
@@ -415,55 +419,85 @@ class Vm {
         const func = this.context.getVar(name);
 
         if (func.__token__ !== "NATIVE") {
-            throw new VmError(`${name} is not a native function (${func.__token__})`);
+            throw `${name} is not a native function (${func.__token__})`;
         }
 
-        return setType(func.__content__(args));
+        return this.setType(func.__content__(args));
     }
 
+    /**
+     * Call native js function
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     callAnonymous(list) {
         const func = list[0];
         const args = list.slice(1, list.length);
 
-        return executeFunction(list[0], func, args);
+        return this.executeFunction(list[0], func, args);
     }
 
+    /**
+     * Call native js function
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     callLambda(list) {
-        const func = executeInstruction(list[0]);
+        const func = this.executeInstruction(list[0]);
 
         const args = list.slice(1, list.length);
 
-        return executeFunction(list[0], func, args);
+        return this.executeFunction(list[0], func, args);
     }
 
+    /**
+     * Call native js function
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     callFunction(list) {
         const name = list[0].__content__;
 
         const func = this.context.getVar(name);
         const args = list.slice(1, list.length);
 
-        return executeFunction(list[0], func, args);
+        return this.executeFunction(list[0], func, args);
     }
 
+    /**
+     * Call native js function
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     callOperator(list) {
         const symbol = list[0].__content__;
 
         switch (symbol) {
-        case "import": return operatorImport(list);
-        case "func": return operatorFunc(list);
-        case "let": return operatorLet(list);
-        case "array": return operatorArray(list);
-        case "sys": return operatorSys(list);
-        case "if": return operatorIf(list);
+        case "import": return this.operatorImport(list);
+        case "func": return this.operatorFunc(list);
+        case "let": return this.operatorLet(list);
+        case "array": return this.operatorArray(list);
+        case "sys": return this.operatorSys(list);
+        case "if": return this.operatorIf(list);
         }
 
-        throw new VmError("Undefined operator " + list[0].__content__);
+        throw "Undefined operator " + list[0].__content__;
     }
 
+    /**
+     * Call native js function
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     processList(list) {
         let op;
         if (Array.isArray(list[0])) {
-            return callLambda(list);
+            return this.callLambda(list);
         } else {
             op = list[0];
         }
@@ -472,22 +506,22 @@ class Vm {
         case "STRING":
         case "NUMBER":
         case "ARRAY":
-            throw new VmError(`Invalid __token__ ${op.__token__} in the list (${inspect(op)})`);
-        case "NAME": return callFunction(list);
-        case "LAMBDA": return callAnonymous(list);
-        case "OPERATOR": return callOperator(list);
-        case "ARITHMETIC": return callArithmetic(list);
-        case "NATIVE": return callNative(list);
+            throw `Invalid __token__ ${op.__token__} in the list (${inspect(op)})`;
+        case "NAME": return this.callFunction(list);
+        case "LAMBDA": return this.callAnonymous(list);
+        case "OPERATOR": return this.callOperator(list);
+        case "ARITHMETIC": return this.callArithmetic(list);
+        case "NATIVE": return this.callNative(list);
         }
 
-        throw new VmError("Undefined __token__: " + op.__token__);
+        throw "Undefined __token__: " + op.__token__;
     }
 
     /**
      * Run the ast in the VM
      * 
      * @param {Instruction[]} tokens - The ast to execute
-     * @return {Var} - The result of the execution
+     * @return {Var<any>} - The result of the execution
      */
     run(tokens) {
         const corePath = path.resolve(__dirname, "..", "lib");

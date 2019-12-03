@@ -6,14 +6,13 @@ const ast = require("./ast.js");
 
 const Closure = require("./vm/closure");
 const Debugger = require("./vm/debugger");
-const VmError = require("./vm/error");
 
 /**
  * @typedef StackEntry - Stack line
  * @type {object}
  * @property {string} file - File of the token
  * @property {number} line - File line of the token
- * @property {Closure} closure - Closure of the token
+ * @property {string} closure - Closure of the token
  * @property {string} func - Function of the token
  */
 
@@ -97,7 +96,7 @@ class Vm {
             }
         }
 
-        throw new VmError(`Invalid type ${typeof __content__} (${inspect(__content__)})`);
+        throw `Invalid type ${typeof __content__} (${inspect(__content__)})`;
     }
 
     /**
@@ -136,7 +135,7 @@ class Vm {
             };
         }
 
-        throw new VmError(`Invalid variable type ${variable.__token__} (${inspect(variable.__content__)})`);
+        throw `Invalid variable type ${variable.__token__} (${inspect(variable.__content__)})`;
     }
 
     /**
@@ -204,7 +203,7 @@ class Vm {
     operatorFunc(list) {
         let func;
 
-        if (list.length < 3) throw new VmError("Wrong number of arguments in func");
+        if (list.length < 3) throw "Wrong number of arguments in func";
 
         if (Array.isArray(list[1])) {
             let __params__ = list[1];
@@ -214,7 +213,7 @@ class Vm {
             let data = { __instructions__, __params__, __name__, __closure__: this.context };
             func = { __token__: "LAMBDA", __content__: data };
         } else {
-            if (list.length < 4) throw new VmError("Wrong number of arguments in func " + list[1]);
+            if (list.length < 4) throw "Wrong number of arguments in func " + list[1];
 
             let __params__ = list[2];
             let __instructions__ = list.slice(3, list.length);
@@ -256,7 +255,7 @@ class Vm {
      * @returns {Iterable<Var<any>>} - The variable returned
      */
     iterateOnArray(list) {
-        if (list.__token__ !== "ARRAY") throw new VmError(`${inspect(list)} is not an array`);
+        if (list.__token__ !== "ARRAY") throw `${inspect(list)} is not an array`;
 
         let a = {
             /**
@@ -309,7 +308,7 @@ class Vm {
         const arg = list[1].__content__.split(".");
         const PATH = this.resolveToken(this.context.getVar("PATH"));
 
-        if (!PATH) throw new VmError("No path available");
+        if (!PATH) throw "No path available";
 
         for (let currPath of PATH) {
             const filePath = path.resolve(currPath, ...arg) + ".cr";
@@ -320,19 +319,25 @@ class Vm {
                 return this.executeInstructions(ast(data, filePath));
             } catch (e) {
                 if (e.code === "ENOENT") continue;
-                throw new VmError(e);
+                throw e;
             }
         }
 
-        throw new VmError("Unknow file " + arg.join("."));
+        throw "Unknow file " + arg.join(".");
     }
 
+    /**
+     * Compute nums
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     callArithmetic(list) {
         let dataValues;
 
         const op = list[0].__content__;
 
-        data = resolveTokens(list.slice(1, list.length).map(executeInstruction));
+        let data = this.resolveTokens(list.slice(1, list.length).map(this.executeInstruction));
 
         const args = data.slice(1, data.length);
         const initial = data[0];
@@ -349,27 +354,35 @@ class Vm {
         case "!=": res = data[0] != data[1]; break;
         case "!": res = !data[0]; break;
         default:
-            throw new VmError("Undefined arithmetic" + op);
+            throw "Undefined arithmetic" + op;
         }
 
-        return setType(res);
+        return this.setType(res);
     }
 
+    /**
+     * Execute function
+     * 
+     * @param {Var<any>} loc - The instruction list
+     * @param {Var<FunctionData>} func - The instruction list
+     * @param {Instruction[]} args - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     executeFunction(loc, func, args) {
         if (func.__token__ !== "LAMBDA") {
-            throw new VmError(`${typeof func} is not a function (${func.__token__})`);
+            throw `${typeof func} is not a function (${func.__token__})`;
         }
 
         let argsValue = [];
         while (true) {
-            arg = args.shift();
+            let arg = args.shift();
             if (arg === undefined) break;
 
-            res = executeInstruction(arg);
+            let res = this.executeInstruction(arg);
             argsValue.push(res);
         }
 
-        stack.push({
+        this.stack.push({
             file: loc.__file__,
             line: loc.__line__,
             closure: this.context.name,
@@ -384,14 +397,14 @@ class Vm {
             this.context.setVar(desc.__content__, argsValue[index]);
             index++;
         }
-        this.context.setVar("__arguments__", setType(resolveTokens(argsValue)));
-        this.context.setVar("__name__", setType(func.__name__));
+        this.context.setVar("__arguments__", this.setType(this.resolveTokens(argsValue)));
+        this.context.setVar("__name__", this.setType(func.__name__));
 
-        result = executeInstructions(func.__instructions__);
+        let result = this.executeInstructions(func.__instructions__);
 
         this.context = backupContext;
 
-        stack.pop();
+        this.stack.pop();
         return result;
     }
 

@@ -15,6 +15,16 @@
         "comma-dangle": ["error", "always-multiline"],
         "quotes": ["error", "double"],
         "semi": ["error", "always"],
-        "indent": ["error", 4]
+        "indent": ["error", 4],
+        "valid-jsdoc": ["error", {"requireReturn": false}],
+        "require-jsdoc": ["error", {
+            "require": {
+                "FunctionDeclaration": true,
+                "MethodDefinition": true,
+                "ClassDeclaration": false,
+                "ArrowFunctionExpression": true,
+                "FunctionExpression": true
+            }
+        }]
     }
 }

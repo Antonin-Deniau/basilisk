@@ -12,8 +12,8 @@ const VmError = require("./vm/error");
  * @typedef StackEntry - Stack line
  * @type {object}
  * @property {string} file - File of the token
- * @property {integer} line - File line of the token
- * @property {closure} Closure - Closure of the token
+ * @property {number} line - File line of the token
+ * @property {Closure} closure - Closure of the token
  * @property {string} func - Function of the token
  */
 
@@ -23,24 +23,65 @@ const VmError = require("./vm/error");
  */
 
 /**
- * @typedef {object} Var - A vm variable
+ * @typedef {object} FunctionData -A function var
  * @property {string} __token__ - Variable type.
- * @property {any} __content__ - The content of the variable.
+ * @property {Closure} __closure__ - The closure of the function.
+ * @property {string} __name__ - The name of the function.
+ * @property {Instruction[]} __instructions__ - The instructions of the function.
+ * @property {Var[]} __params__ - The parametters of the function.
+ */
+
+/**
+ * @typedef {object} Var - A vm variable
+ * @template T
+ * @property {string} __token__ - Variable type.
+ * @property {T} __content__ - The content of the variable.
+ */
+
+/**
+ * @typedef {Var<any>|Var<any>[]} Instruction - An instruction
  */
 
 class Vm {
     /**
      * Instantiate a VM
      *
-     * @param {string[]} paths 
+     * @param {string[]} paths - Paths avaialable in the global scope.
      * @constructor
      */
     constructor(paths = []) {
+        /** @type {string[]} paths - Paths avaialable in the global scope. */
         this.paths = paths;
+        /** @type {Stack} - The stack of the app. */
         this.stack = [];
+        /** @type {Closure} context - The current context. */
         this.context = new Closure(undefined, "__G");
     }
 
+    /**
+     * Format the error
+     * 
+     * @param {string} error - The error message
+     * @returns {string} - The formatted error
+     */
+    getVmError(error) {
+        /**
+         * Format a stack entry
+         * 
+         * @param {StackEntry} e - The stack entry to format 
+         * @returns {string} - The formated stackentry
+         */
+        let line = e => `\t${e.file}:${e.line}\t${e.closure}:${e.func}()`;
+        return `Error: ${error}\n${this.stack.map(line).join("\n")}\n`;
+    }
+
+    /**
+     * Encapsulate the variable content
+     * 
+     * @param {any} __content__ - The content to encapsulate
+     * @returns {Var<any>} - The variable
+     * @throws {VmError}
+     */
     setType(__content__) {
         switch (typeof __content__) {
         case "number": return { __token__: "NUMBER", __content__ };
@@ -51,7 +92,7 @@ class Vm {
             if (Array.isArray(__content__)) {
                 return {
                     __token__: "ARRAY",
-                    __content__: __content__.map(setType),
+                    __content__: __content__.map(this.setType),
                 };
             }
         }
@@ -59,10 +100,22 @@ class Vm {
         throw new VmError(`Invalid type ${typeof __content__} (${inspect(__content__)})`);
     }
 
+    /**
+     * De-encapsulate vars
+     * 
+     * @param {Var<any>[]} vars - Return the de-encapsulated variables
+     * @returns {any[]} - The variables de-encapsulated
+     */
     resolveTokens(vars) {
-        return vars.map(resolveToken);
+        return vars.map(this.resolveToken);
     }
 
+    /**
+     * De-encapsulate var
+     * 
+     * @param {Var<any>} variable - Return the de-encapsulated variable
+     * @returns {any} - The variable de-encapsulated
+     */
     resolveToken(variable) {
         switch (variable.__token__) {
         case "STRING": 
@@ -72,23 +125,29 @@ class Vm {
         case "UNDEFINED":
             return variable.__content__;
         case "NAME":
-            let res = context.getVar(variable.__content__);
-            return resolveToken(res);
+            let res = this.context.getVar(variable.__content__);
+            return this.resolveToken(res);
         case "ARRAY":
-            return resolveTokens(variable.__content__);
+            return this.resolveTokens(variable.__content__);
         case "LAMBDA":
-            return function(...args) {
-                let res = executeFunction(variable, variable.__content__, args);
-                return resolveToken(executeInstruction(res));
+            return (...args) => {
+                let res = this.executeFunction(variable, variable, args);
+                return this.resolveToken(this.executeInstruction(res));
             };
         }
 
         throw new VmError(`Invalid variable type ${variable.__token__} (${inspect(variable.__content__)})`);
     }
 
+    /**
+     * Execute an instruction
+     * 
+     * @param {Instruction} instr - The instruction to be executed
+     * @returns {Var<any>} - The variable returned
+     */
     executeInstruction(instr) {
         if (Array.isArray(instr)) {
-            return processList(instr);
+            return this.processList(instr);
         } else {
             switch (instr.__token__) {
             case "STRING": 
@@ -99,44 +158,61 @@ class Vm {
             case "UNDEFINED":
                 return instr;
             case "NAME":
-                let a = context.getVar(instr.__content__);
-                return executeInstruction(a);
+                let a = this.context.getVar(instr.__content__);
+                return this.executeInstruction(a);
             }
         }
     }
 
+    /**
+     * Execute instructions
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     executeInstructions(list) {
         let res;
 
         for (const data of list) {
-            res = executeInstruction(data);
+            res = this.executeInstruction(data);
         }
 
         return res;
     }
 
+    /**
+     * Execute a system call
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     operatorSys(list) {
-        let path = resolveTokens(list.slice(1, list.length - 1).map(executeInstruction));
-        let args = resolveTokens(list[list.length - 1].map(executeInstruction));
+        let path = this.resolveTokens(list.slice(1, list.length - 1).map(this.executeInstruction));
+        let args = this.resolveTokens(list[list.length - 1].map(this.executeInstruction));
 
         let res = path.reduce((acc, arr) => acc[arr], global).call(...args);
 
-        return setType(res);
+        return this.setType(res);
     }
 
+    /**
+     * Declare function
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     operatorFunc(list) {
         let func;
 
         if (list.length < 3) throw new VmError("Wrong number of arguments in func");
-
-        let d = { __token__: "LAMBDA", __closure__: context };
 
         if (Array.isArray(list[1])) {
             let __params__ = list[1];
             let __instructions__ = list.slice(2, list.length);
             let __name__ = "_" + Math.random().toString(36).substr(2, 9);
 
-            func = { ...d, __instructions__, __params__, __name__ };
+            let data = { __instructions__, __params__, __name__, __closure__: this.context };
+            func = { __token__: "LAMBDA", __content__: data };
         } else {
             if (list.length < 4) throw new VmError("Wrong number of arguments in func " + list[1]);
 
@@ -144,61 +220,94 @@ class Vm {
             let __instructions__ = list.slice(3, list.length);
             let __name__ = list[1].__content__;
 
-            func = { ...d, __instructions__, __params__, __name__ };
+            let data = { __instructions__, __params__, __name__, __closure__: this.context };
+            func = { __token__: "LAMBDA", __content__: data };
 
-            context.setVar(__name__, func);
+            this.context.setVar(__name__, func);
         }
 
         return func;
     }
 
+    /**
+     * Test ternary
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     operatorIf(list) {
         const condition = list[1];
         const valid = list[2];
         const invalid = list[3];
 
-        result = resolveToken(executeInstruction(condition));
+        let result = this.resolveToken(this.executeInstruction(condition));
 
-        let res; 
         if (result) {
-            res = executeInstruction(valid);
+            return this.executeInstruction(valid);
         } else {
-            res = executeInstruction(invalid);
+            return this.executeInstruction(invalid);
         }
-
-        return res;
     }
 
+    /**
+     * Iterate on array
+     * 
+     * @param {Var<any>} list - The array to itterate on
+     * @returns {Iterable<Var<any>>} - The variable returned
+     */
     iterateOnArray(list) {
         if (list.__token__ !== "ARRAY") throw new VmError(`${inspect(list)} is not an array`);
 
-        let a = {};
-        a[Symbol.iterator] = function* () {
-            for (let item of list.__content__) {
-                yield item;
-            }
+        let a = {
+            /**
+             * The iterator
+             */
+            [Symbol.iterator]: function* () {
+                for (let item of list.__content__) {
+                    yield item;
+                }
+            },
         };
+
         return a;
     }
 
+    /**
+     * Assign variable
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     operatorLet(list) {
         const name = list[1].__content__;
         const data = list[2];
 
-        res = executeInstruction(data);
+        let res = this.executeInstruction(data);
 
-        context.setVar(name, res);
+        this.context.setVar(name, res);
 
         return res;
     }
 
+    /**
+     * Define array
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     operatorArray(list) {
-        return setType(resolveTokens(list.slice(1, list.length)));
+        return this.setType(this.resolveTokens(list.slice(1, list.length)));
     }
 
+    /**
+     * Import and parse a file
+     * 
+     * @param {Instruction[]} list - The instruction list
+     * @returns {Var<any>} - The variable returned
+     */
     operatorImport(list) {
         const arg = list[1].__content__.split(".");
-        const PATH = context.getVar("PATH");
+        const PATH = this.resolveToken(this.context.getVar("PATH"));
 
         if (!PATH) throw new VmError("No path available");
 
@@ -208,7 +317,7 @@ class Vm {
             try {
                 const data = fs.readFileSync(filePath, "utf8");
 
-                return executeInstructions(ast(data, filePath));
+                return this.executeInstructions(ast(data, filePath));
             } catch (e) {
                 if (e.code === "ENOENT") continue;
                 throw new VmError(e);
@@ -263,25 +372,24 @@ class Vm {
         stack.push({
             file: loc.__file__,
             line: loc.__line__,
-            closure: context.name,
+            closure: this.context.name,
             func: func.__name__,
         });
 
-        let bk = context.name;
-        let backupContext = context;
-        context = func.__closure__.createClosure(func.__name__);
+        let backupContext = this.context;
+        this.context = func.__closure__.createClosure(func.__name__);
 
         let index = 0;
         for (let desc of func.__params__) {
-            context.setVar(desc.__content__, argsValue[index]);
+            this.context.setVar(desc.__content__, argsValue[index]);
             index++;
         }
-        context.setVar("__arguments__", setType(resolveTokens(argsValue)));
-        context.setVar("__name__", setType(func.__name__));
+        this.context.setVar("__arguments__", setType(resolveTokens(argsValue)));
+        this.context.setVar("__name__", setType(func.__name__));
 
         result = executeInstructions(func.__instructions__);
 
-        context = backupContext;
+        this.context = backupContext;
 
         stack.pop();
         return result;
@@ -291,7 +399,7 @@ class Vm {
         const name = list[0].__content__;
         const args = list.slice(1, list.length);
 
-        const func = context.getVar(name);
+        const func = this.context.getVar(name);
 
         if (func.__token__ !== "NATIVE") {
             throw new VmError(`${name} is not a native function (${func.__token__})`);
@@ -318,7 +426,7 @@ class Vm {
     callFunction(list) {
         const name = list[0].__content__;
 
-        const func = context.getVar(name);
+        const func = this.context.getVar(name);
         const args = list.slice(1, list.length);
 
         return executeFunction(list[0], func, args);
@@ -362,17 +470,22 @@ class Vm {
         throw new VmError("Undefined __token__: " + op.__token__);
     }
 
+    /**
+     * Run the ast in the VM
+     * 
+     * @param {Instruction[]} tokens - The ast to execute
+     * @return {Var} - The result of the execution
+     */
     run(tokens) {
         const corePath = path.resolve(__dirname, "..", "lib");
 
-        context.setVar("PATH", [...this.paths, corePath]);
+        this.context.setVar("PATH", [...this.paths, corePath]);
 
         try {
-            let res = executeInstructions(tokens);
-            return res;
+            return this.executeInstructions(tokens);
         } catch (e) {
             console.log(e.stack);
-            console.log(e.message);
+            console.log(this.getVmError(e));
             //new Debugger().start(context);
         }
     }

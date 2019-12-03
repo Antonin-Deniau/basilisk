@@ -1,4 +1,8 @@
+/** @typedef {import('../vm.js').Var} Var */
+
 const { getPathAndName, resolveRecursive, setDataPath } = require("../utils/vmUtils.js");
+const VmError = require("../vm/error");
+
 
 /** @module vm/Closure */
 
@@ -10,37 +14,45 @@ class Closure {
      * @param {string} name - Name of the closure
      */
     constructor(prev, name) {
-        /** @property {Closure} prev - The previous closure */
+        /** @type {Closure} prev - The previous closure */
         this.prev = prev;
 
-        /** @property {string} name - The closure name */
+        /** @type {string} name - The closure name */
         this.name = name;
 
-        /** @property {Object.<string, Var>} data - The closure variables */ 
+        /** @type {Object.<string, Var>} data - The closure variables */ 
         this.data = {};
     }
 
     /**
      * Create a new closure
      * 
-     * @param {string} name
-     * @returns {Closure} 
+     * @param {string} name - The name of the closure
+     * @returns {Closure} - The closure created
      */
     createClosure(name) {
         return new Closure(this, name);
     }
 
     /**
+     * Declare a variable in closure
      * 
-     * @param {string} varName 
-     * @param {Var} value 
+     * @param {string} varName - THe name of the variable
+     * @param {Var} value - The value of the variable
      */
     setVar(varName, value) {
         let [path, name] = getPathAndName(varName);
         setDataPath(this.data, path, name, value);
     }
 
+    /**
+     * Return the variable
+     * 
+     * @param {string} varName - The name of the variable
+     * @returns {Var} - The variable
+     */
     getVar(varName) {
+        /** @type {Closure} */
         let clo = this;
 
         while (true) {

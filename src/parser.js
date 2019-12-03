@@ -14,6 +14,12 @@ const atom = choose([number, string, operator, arithmetic, name]);
 const startList = match("START_LIST", /</);
 const endList = match("END_LIST", />/);
 
+/**
+ * Function to declare a list
+ * 
+ * @param {string} str - The data to parse
+ * @returns {ParsingResult} - The parsing result
+ */
 const list = str => seq([
     startList,
     loop(choose([atom, list])),

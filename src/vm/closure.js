@@ -1,8 +1,7 @@
 const { getPathAndName, resolveRecursive, setDataPath } = require("../utils/vmUtils.js");
 
-/**
- * @namespace - The closure
- */
+/** @module vm/Closure */
+
 class Closure {
     /**
      * Instantiate a new closure

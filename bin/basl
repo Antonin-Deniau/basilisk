@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path"); 
 
 const ast = require("../src/ast.js");
-const vm = require("../src/vm.js");
+const Vm = require("../src/vm.js");
 
 try {
     const scriptName = path.resolve(process.cwd(), process.argv[2]);
@@ -13,7 +13,7 @@ try {
     const data = fs.readFileSync(scriptName, "utf8");
     const tokens = ast(data, scriptName);
 
-    new Vm().run(tokens, [scriptPath]);
+    new Vm(tokens, [scriptPath]).run();
 } catch (err) {
     console.error(err);
 }

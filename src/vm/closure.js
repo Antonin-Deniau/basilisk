@@ -1,7 +1,6 @@
-/** @typedef {import('../vm.js').Var} Var */
+/** @typedef {import('../vm.js').Var<any>} Var */
 
 const { getPathAndName, resolveRecursive, setDataPath } = require("../utils/vmUtils.js");
-const VmError = require("../vm/error");
 
 
 /** @module vm/Closure */
@@ -65,7 +64,7 @@ class Closure {
             if (clo === undefined) break;
         }
 
-        throw new VmError("Unknown variable " + varName);
+        throw "Unknown variable " + varName;
     }
 }
 

@@ -22,7 +22,7 @@
                 "FunctionDeclaration": true,
                 "MethodDefinition": true,
                 "ClassDeclaration": false,
-                "ArrowFunctionExpression": true,
+                "ArrowFunctionExpression": false,
                 "FunctionExpression": true
             }
         }]

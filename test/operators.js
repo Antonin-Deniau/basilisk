@@ -5,7 +5,6 @@ let assert = require("assert");
 const ast = require("../src/ast.js");
 const Vm = require("../src/vm.js");
 
-
 const exec = d => new Vm().run(ast(d, "<test_script>"));
 
 describe("Operators", function() {

@@ -2,7 +2,7 @@
 
 <func arr.join <chr>
   <func <arr>
-    <sys "Array" "prototype" "join" <chr arr>>
+    <sys "Array" "prototype" "join" <arr chr>>
   >
 >
 

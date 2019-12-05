@@ -14,18 +14,14 @@ const tokensToAST = (array, file) => {
             data.__content__ = JSON.parse(data.__content__);
         }
 
-        if (data.__token__ === "OPERATOR") {
-            data.__file__ = file;
-        }
-
         if (data.__token__ === "START_LIST") {
-            let res = tokensToAST(array);
+            let res = tokensToAST(array, file);
             captured.push(res);
         } else if (data.__token__ === "END_LIST") {
             return captured;
         } else {
-            let { __token__, __content__ } = data;
-            captured.push({ __token__, __content__ });
+            data.__file__ = file;
+            captured.push(data);
         }
     }
 

@@ -6,7 +6,7 @@ const path = require("path");
 const ast = require("../src/ast.js");
 const Vm = require("../src/vm.js");
 
-//try {
+try {
     const scriptName = path.resolve(process.cwd(), process.argv[2]);
     const scriptPath = path.dirname(scriptName);
 
@@ -14,7 +14,6 @@ const Vm = require("../src/vm.js");
     const tokens = ast(data, scriptName);
 
     new Vm([scriptPath]).run(tokens);
-/*} catch (err) {
+} catch (err) {
     console.error(err);
 }
-*/

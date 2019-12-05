@@ -3,6 +3,7 @@
 
 "C'est un commentaire en texte"
 <func greeting <name>
+  <aiit.gfsdfg>
   <+ "Hello " name " !">
 >
 

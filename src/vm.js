@@ -391,7 +391,8 @@ class Vm {
      * @returns {Var<any>} - The variable returned
      */
     executeFunction(loc, func, args) {
-        if (!["LAMBDA", "NATIVE"].includes(func.__token__)) throw `${typeof func} is not a function (${func.__token__})`;
+        if (!["LAMBDA", "NATIVE"].includes(func.__token__))
+            throw `${typeof func} is not a function (${func.__token__})`;
         let funcData = func.__content__;
 
 
@@ -570,13 +571,13 @@ class Vm {
 
         this.context.setVar("PATH", this.setType([...this.paths, corePath]));
 
-        //try {
-        return this.executeInstructions(tokens);
-        /*} catch (e) {
+        //return this.executeInstructions(tokens);
+        try {
+            return this.executeInstructions(tokens);
+        } catch (e) {
             console.log(this.getVmError(e));
-            console.log(e);
             //new Debugger().start(context);
-        }*/
+        }
     }
 }
 

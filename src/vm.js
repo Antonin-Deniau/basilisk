@@ -222,6 +222,8 @@ class Vm {
     operatorFunc(list) {
         if (list.length < 3) throw "Wrong number of arguments in func";
 
+        let { __file__ , __line__ } = list[0];
+
         let func;
         if (Array.isArray(list[1])) {
             let __params__ = list[1];
@@ -229,7 +231,7 @@ class Vm {
             let __name__ = "_" + Math.random().toString(36).substr(2, 9);
 
             let data = { __instructions__, __params__, __name__, __closure__: this.context };
-            func = { __token__: "LAMBDA", __content__: data };
+            func = { __token__: "LAMBDA", __content__: data, __file__, __line__ };
         } else {
             if (list.length < 4) throw "Wrong number of arguments in func " + list[1];
 
@@ -238,7 +240,7 @@ class Vm {
             let __name__ = list[1].__content__;
 
             let data = { __instructions__, __params__, __name__, __closure__: this.context };
-            func = { __token__: "LAMBDA", __content__: data };
+            func = { __token__: "LAMBDA", __content__: data, __file__, __line__ };
 
             this.context.setVar(__name__, func);
         }

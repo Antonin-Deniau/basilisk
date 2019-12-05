@@ -141,7 +141,8 @@ class Vm {
             return (...args) => {
                 const resolved = args.map(this.setType);
                 let res = this.executeFunction(variable, variable, resolved);
-                return this.resolveToken(this.executeInstruction(res));
+                let a = this.executeInstruction(res);
+                return this.resolveToken(a);
             };
         }
 
@@ -164,6 +165,7 @@ class Vm {
             case "ARRAY":
             case "LAMBDA":
             case "NATIVE":
+            case "BOOLEAN":
             case "NULL":
                 return instr;
             case "NAME":
@@ -171,6 +173,8 @@ class Vm {
                 return this.executeInstruction(a);
             }
         }
+
+        throw `Unknown instruction ${instr.__token__}`;
     }
 
     /**
@@ -382,14 +386,14 @@ class Vm {
      * Execute function
      * 
      * @param {Var<any>} loc - The function location
-     * @param {Var<FunctionData>} func - The function
+     * @param {Var<FunctionData|function>} func - The function
      * @param {Instruction[]} args - The arguments
      * @returns {Var<any>} - The variable returned
      */
     executeFunction(loc, func, args) {
-        if (func.__token__ !== "LAMBDA") 
-            throw `${typeof func} is not a function (${func.__token__})`;
+        if (!["LAMBDA", "NATIVE"].includes(func.__token__)) throw `${typeof func} is not a function (${func.__token__})`;
         let funcData = func.__content__;
+
 
         let argsValue = [];
         while (true) {
@@ -400,30 +404,38 @@ class Vm {
             argsValue.push(res);
         }
 
-        this.stack.push({
-            file: loc.__file__,
-            line: loc.__line__,
-            closure: this.context.name,
-            func: funcData.__name__,
-        });
+        if (func.__token__ === "NATIVE") {
+            if (typeof funcData !== "function") throw "Invalid native call";
 
-        let backupContext = this.context;
-        this.context = funcData.__closure__.createClosure(funcData.__name__);
+            return this.setType(funcData(...this.resolveTokens(argsValue)));
+        } else {
+            this.stack.push({
+                file: loc.__file__,
+                line: loc.__line__,
+                closure: this.context.name,
+                func: funcData.__name__,
+            });
+    
+            let backupContext = this.context;
+            this.context = funcData.__closure__.createClosure(funcData.__name__);
+    
+            let index = 0;
+            for (let desc of funcData.__params__) {
+                this.context.setVar(desc.__content__, argsValue[index]);
+                index++;
+            }
+    
+            this.context.setVar("__arguments__", { __token__: "ARRAY", __content__: argsValue });
+            this.context.setVar("__name__", this.setType(funcData.__name__));
+    
+            let result = this.executeInstructions(funcData.__instructions__);
+    
+            this.context = backupContext;
+    
+            this.stack.pop();
 
-        let index = 0;
-        for (let desc of funcData.__params__) {
-            this.context.setVar(desc.__content__, argsValue[index]);
-            index++;
+            return result;
         }
-        this.context.setVar("__arguments__", this.setType(argsValue.map(this.resolveToken)));
-        this.context.setVar("__name__", this.setType(funcData.__name__));
-
-        let result = this.executeInstructions(funcData.__instructions__);
-
-        this.context = backupContext;
-
-        this.stack.pop();
-        return result;
     }
 
     /**

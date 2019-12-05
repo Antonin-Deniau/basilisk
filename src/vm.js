@@ -93,7 +93,8 @@ class Vm {
         case "number": return { __token__: "NUMBER", __content__ };
         case "string": return { __token__: "STRING", __content__ };
         case "boolean": return { __token__: "BOOLEAN", __content__ };
-        case "function": return { __token__: "NATIVE", __content__ };
+        case "function": 
+            return { __token__: "NATIVE", __content__ };
         case "object":
             if (Array.isArray(__content__)) {
                 return {
@@ -101,6 +102,7 @@ class Vm {
                     __content__: __content__.map(this.setType),
                 };
             }
+        case "undefined": return { __token__: "NULL", __content__: null };
         }
 
         throw `Invalid type ${typeof __content__} (${inspect(__content__)})`;
@@ -128,7 +130,7 @@ class Vm {
         case "BOOLEAN":
         case "NATIVE":
         case "NUMBER":
-        case "UNDEFINED":
+        case "NULL":
             return variable.__content__;
         case "NAME":
             let res = this.context.getVar(variable.__content__);
@@ -162,7 +164,7 @@ class Vm {
             case "ARRAY":
             case "LAMBDA":
             case "NATIVE":
-            case "UNDEFINED":
+            case "NULL":
                 return instr;
             case "NAME":
                 let a = this.context.getVar(instr.__content__);
@@ -413,7 +415,7 @@ class Vm {
             this.context.setVar(desc.__content__, argsValue[index]);
             index++;
         }
-        this.context.setVar("__arguments__", this.setType(this.resolveTokens(argsValue)));
+        this.context.setVar("__arguments__", this.setType(argsValue.map(this.resolveToken)));
         this.context.setVar("__name__", this.setType(funcData.__name__));
 
         let result = this.executeInstructions(funcData.__instructions__);

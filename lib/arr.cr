@@ -13,7 +13,7 @@
     <<arr.reduce
       <func <acc arr> <arr acc>>
       data
-    > __arguments__>
+    > functions>
   >
 >
 
@@ -33,8 +33,8 @@
   >
 >
 
-<func arr.reduce <funct arr>
-  <func <init>
+<func arr.reduce <funct init>
+  <func <arr>
     <sys "Array" "prototype" "reduce" <arr funct init>>
   >
 >

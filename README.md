@@ -26,6 +26,6 @@ example:
 <io.echo <greet_everyones_except group "Jean">>
 ```
 
-It features a lib/import system and clojure.
+It features a lib/import system and closures.
 
 The namespace/variable system is currently broken.
